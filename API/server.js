@@ -40,7 +40,7 @@ app.use(express.urlencoded({ extended: true })); // Pour parser application/x-ww
 
 // Configurez CORS  :
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: ['https://open-tasks.onrender.com','http://localhost:5173', 'http://localhost:5174'],
     credentials: true, // Autorise les cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   }));
