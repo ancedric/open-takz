@@ -21,6 +21,7 @@ import LegalNotice from './views/LegalNotice.vue'
 import Support from './views/Support.vue'
 
 const routes = [
+  { path: '*', component: Home },
   { path: '/', component: LandingPage },
   { path: '/home', component: Home },
   { path: '/project/:userRef', component: Project },
