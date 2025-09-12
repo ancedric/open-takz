@@ -55,7 +55,13 @@ app.use('/collab', collabRouter);
 app.use('/team', teamRouter);
 //app.use('/notification', notificationsRouter);
 
+// Sert les fichiers statiques de votre application Vue.js
+app.use(express.static(path.join(__dirname, 'dist')));
 
+// Redirige toutes les autres requêtes vers index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
 
 // Middleware pour servir les fichiers statiques
 app.use('/images', express.static(path.join(__dirname, 'images')));
