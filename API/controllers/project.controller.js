@@ -6,8 +6,10 @@ import {
   updateProject,
   deleteProject
 } from '../models/project.model.js';
+import { getUserByRef } from './user.controller.js';
 import { createTeam } from '../models/team.model.js';
 import { insertCollaborator } from '../models/collaborator.model.js';
+import { sendEmail } from '../services/email.service.js';
 
 export const createNewProject = async (req, res) => {
   try {
@@ -45,6 +47,30 @@ export const createNewProject = async (req, res) => {
     
     // Assurez-vous que votre fonction insertCollaborator accepte le rôle
     await insertCollaborator(collabRef, userRef, teamRef, role);
+
+    //Envoie de l'email de notification de création du nouveau projet
+    //1. Récupérer l'email de l'utilisateur
+    const newUser = await getUserByRef(userRef);
+    if (!newUser || !newUser.email) {
+      return res.status(400).json({ error: 'Utilisateur non trouvé ou email manquant' });
+    }
+
+    const to = newUser.email;
+    const subject = 'Création d\'un nouveau projet sur OpenTaskz !';
+    const htmlContent = `<p>Bonjour ${newUser.firstName},</p><p>Félicitations!Vous venez de créer un nouveau projet sur OpenTaskz</p>
+                        <p>Détails du projet:</p>
+                        <ul></ul>
+                          <li>Nom: ${name}</li>
+                          <li>Description: ${description || 'N/A'}</li>
+                          <li>Type: ${type || 'N/A'}</li>
+                          <li>Objectifs: ${objectives || 'N/A'}</li>
+                          <li>Date de début: ${start_date || 'N/A'}</li>
+                        </ul>
+                        <p>Vous pouvez gérer votre projet en vous connectant à votre compte OpenTaskz.</p>
+                        <p>Merci d'utiliser notre plateforme!</p>
+                        <p>Cordialement,<br/>L'équipe OpenTaskz</p>`;
+    
+    await sendEmail(to, subject, htmlContent);
 
     res.status(201).json({
       message: 'Projet, équipe et collaborateur créés avec succès',
