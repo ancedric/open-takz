@@ -7,9 +7,7 @@ const userStore = useUserStore()
 <template>
     <div class="menu-ctn">
         <ul class="menu-list">
-            <li class="list-item"><router-link to="/home" class="link">Home</router-link></li>
             <li class="list-item"><router-link :to="`/project/${userStore.user.userref}`" class="link">Projects</router-link></li>
-            <li class="list-item"><router-link to="/teams" class="link">Teams</router-link></li>
         </ul>
     </div>
 </template>

@@ -122,7 +122,7 @@ const submitTask = async () => {
         formData.append('start_date', projectStartDate.value)
         formData.append('objectives', projectObjectives.value)
         formData.append('team', projectTeam.value)
-        formData.append('userRef', useUser.user.userRef)
+        formData.append('userRef', useUser.user.userref)
         
         // Ajoutez le fichier s'il existe
         if (file.value) {

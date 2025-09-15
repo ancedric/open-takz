@@ -201,7 +201,7 @@ const handleSubmit = async () => {
     if (response.data) {
       success.value = true;
       setTimeout(() => {
-        router.push('/confirmation');
+        router.push('/project/' + response.data.userref);
       }, 1500);
     }
   } catch (error) {

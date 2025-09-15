@@ -84,7 +84,7 @@
             errors.value = false;
             
             // 4. Redirection après une connexion réussie
-            router.push('/home');
+            router.push('/project/' + userData.userref);
 
         } else {
             // Le serveur n'a pas renvoyé les données attendues

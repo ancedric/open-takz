@@ -6,12 +6,6 @@
                         <div class="menu">
                             <Menu />
                         </div>
-                        <div class="search">
-                            <input type="search" placeholder="search a project"/>
-                            <button class="search-btn">
-                                <img src="../assets/icons/search.png" alt="">
-                            </button>
-                        </div>
                         <div class="notifs">
                             <Notifications />
                             <div v-if="!isLoading" class="profile">
