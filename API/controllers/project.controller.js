@@ -16,14 +16,14 @@ export const createNewProject = async (req, res) => {
   try {
     const {
       name,
-      userRef,
+      userref,
       description = null,
       type = null,
       objectives = null,
       start_date = null
     } = req.body;
 
-    if (!name || !userRef) {
+    if (!name || !userref) {
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
