@@ -204,6 +204,20 @@ export const getUserByRef = async (req, res) => {
   }
 };
 
+export const getUserByEmail = async (req, res) => {
+  const email = req.params.email;
+  try {
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+    res.status(200).json({ message: 'Utilisateur récupéré avec succès', data: user });
+  } catch (error) {
+    console.error('Erreur récupération utilisateur:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+};
+
 // Pour JWT, la "déconnexion" côté serveur ne supprime rien : c’est côté client qu’on efface le token
 export const logoutUser = (req, res) => {
   res.status(200).json({ message: 'Déconnexion réussie (supprimez le token côté client)' });

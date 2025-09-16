@@ -569,6 +569,27 @@ const calculateTimeRemaining = (startDate, endDate) => {
         return days;
     });
 
+    const searchMember = async (email) => {
+        try{
+            isMembersLoading.value = true;
+            const response = await axios.get(
+                `${import.meta.env.VITE_API_URL}/user/search?email=${email}`
+            );
+            if (response.data?.data) {
+                console.log("Membre trouvé:", response.data.data);
+                isMembersLoading.value = false;
+                return response.data.data;
+            } else {
+                console.log("Aucun membre trouvé avec cet email.");
+                isMembersLoading.value = false;
+                return null;
+            }
+    }catch(err){
+            console.error("Erreur lors de la recherche du membre:", err);
+            isMembersLoading.value = false;
+            return null;
+        }
+}
 
 onMounted(async () => {
         await getProjects();
@@ -678,7 +699,7 @@ watch(
                                         <ul>
                                             <li @click="addTask">Add Task</li>
                                             <li @click="manageTeam">Manage Team</li>
-                                            <li @click="addDocuments">Add Documents</li>
+                                            <!--<li @click="addDocuments">Add Documents</li>-->
                                         </ul>
                                     </div>  
                                 </div>
@@ -1095,7 +1116,7 @@ watch(
             <div class="team-search-section">
                 <p>Invite members to join your team</p>
                 <input type="text" v-model="searchMember" placeHolder="Enter email address..." class="project-input" />
-                <button class="build-btn" @click="buildTeam">Search <div><img src="../assets/icons/search.png" alt=""></div></button>
+                <button class="build-btn" @click="searchMember">Search <div><img src="../assets/icons/search.png" alt=""></div></button>
             </div>
             <div class="member-research-result">
                 <div class="member-card" v-if="isMembersLoading">

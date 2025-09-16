@@ -11,6 +11,7 @@ import {
   updateProfile,
   getUsers,
   getUserByRef,
+  getUserByEmail,
   logoutUser
 } from '../controllers/user.controller.js';
 
@@ -48,6 +49,7 @@ userRouter.put('/profile', isAuthenticated, updateProfile);
 // Admin / listing
 userRouter.get('/users', isAuthenticated, getUsers);     // optionnellement protégé
 userRouter.get('/:ref', isAuthenticated, getUserByRef);  // idem
+userRouter.get('/email/:email', isAuthenticated, getUserByEmail); // idem
 
 // Déconnexion → côté client uniquement (supprimer le token)
 userRouter.post('/logout', logoutUser); // en JWT, ça peut juste dire "token côté client supprimé"
