@@ -2,7 +2,7 @@ import db from '../services/db.js';
 
 export const createNotification = async (notifRef, title, content, userRef) => {
     const sql = `
-        INSERT INTO s (notifRef, title, content, userRef, createdAt, isRead) 
+        INSERT INTO notifications (notifRef, title, content, userRef, createdAt, isRead) 
         VALUES ($1, $2, $3, $4, NOW(), FALSE) RETURNING *;
     `;
     const result = await db.query(sql, [notifRef, title, content, userRef]);
