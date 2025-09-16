@@ -16,14 +16,6 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth:{
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PWD
-  }
-});
-
 // Récupérer l'utilisateur courant depuis le token
 export const getCurrentUser = (req, res) => {
   if (req.user) {
@@ -45,7 +37,6 @@ export const getCurrentUser = (req, res) => {
   res.json({ valid: false });
 };
 
-// Session : dans un monde JWT, on ne "vérifie" plus une session, mais on peut juste dire si le token est valide
 export const getSession = (req, res) => {
   if (req.user) {
     return res.json({
@@ -120,7 +111,28 @@ export const signupUser = async (req, res) => {
       privilege: privilege || 'user'
     });
 
-    // Ici on pourrait envoyer un email, inchangé pour l’instant
+    // INotification de Bienvenue
+    const mailOptions = {
+      from: process.env.BREVO_SMTP_USER,
+      to: email,
+      subject: 'Bienvenue sur Open Task !',
+      text: `Bonjour ${firstname},\n\nBienvenue sur Open Task ! Nous sommes ravis de vous compter parmi nous.\n\nCordialement,\nL'équipe Open Task`
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error('Erreur envoi email:', error);
+      } else {
+        console.log('Email envoyé:', info.response);
+      }
+    });
+
+    //Notification de Bienvenue
+    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+    const title = 'Bienvenue sur Open Task';
+    const content = `Bonjour ${firstname}, bienvenue sur Open Task ! Nous sommes ravis de vous compter parmi nous.`;
+    const newNotif = await createNotification(notifRef, title, content, userRef);
+    console.log('Notification créée:', newNotif);
 
     res.status(201).json({ message: 'Utilisateur créé avec succès', data: user });
 

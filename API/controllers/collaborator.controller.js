@@ -7,6 +7,7 @@ import {
   updateCollaboratorRole,
   deleteCollaboratorByRef,
 } from '../models/collaborator.model.js';
+import { createNotification } from '../models/notification.model.js';
 
 export const addCollaborator = async (req, res) => {
   const { userRef, teamRef } = req.body;
@@ -27,6 +28,13 @@ export const addCollaborator = async (req, res) => {
 
     const collabRef = `COLLAB_${Math.floor(Math.random() * 1000000)}`;
     await insertCollaborator(collabRef, userRef, teamRef);
+
+    //Créationde la notification d'ajout de collaborateur
+    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+    const title = 'Ajouté à une équipe';
+    const content = `Vous avez été ajouté à l'équipe "${teamResult.rows[0].name}".`;
+    const newNotif = await createNotification(notifRef, title, content, userRef);
+    console.log('Notification créée:', newNotif);
 
     return res.status(201).json({ message: 'Collaborateur ajouté avec succès' });
   } catch (error) {
@@ -79,6 +87,14 @@ export const updateRole = async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Collaborateur non trouvé' });
     }
+
+    //création de la notification de changement de rôle
+    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+    const title = 'Changement de rôle';
+    const content = `Votre rôle dans l'équipe a été changé en "${role}".`;
+    const newNotif = await createNotification(notifRef, title, content, result.rows[0].userRef);
+    console.log('Notification créée:', newNotif);
+
     return res.status(200).json({ message: 'Rôle mis à jour avec succès' });
   } catch (error) {
     console.error('Erreur mise à jour rôle:', error);
@@ -94,6 +110,14 @@ export const deleteCollaborator = async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Collaborateur non trouvé' });
     }
+
+    //création de la notification de suppression de collaborateur
+    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+    const title = 'Retiré de l\'équipe';
+    const content = `Vous avez été retiré de l'équipe.`;
+    const newNotif = await createNotification(notifRef, title, content, result.rows[0].userRef);
+    console.log('Notification créée:', newNotif);
+    
     return res.status(200).json({ message: 'Collaborateur supprimé avec succès' });
   } catch (error) {
     console.error('Erreur suppression collaborateur:', error);

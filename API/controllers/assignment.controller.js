@@ -5,6 +5,7 @@ import {
   checkAssignmentExists,
   getTasksByCollaborator
 } from '../models/assignment.model.js';
+import { createNotification } from '../models/notification.model.js';
 
 export const createAssignmentController = async (req, res) => {
   const { taskRef, collabRef, userRef } = req.body;
@@ -19,6 +20,14 @@ export const createAssignmentController = async (req, res) => {
   try {
     const assRef = `ASSIGN_${Math.floor(Math.random() * 1000000)}`;
     const result = await createAssignment(assRef, collabRef, taskRef, userRef);
+    
+    //Notification de l'assignation
+  
+    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+    const title = 'Nouvelle assignation de tâche';
+    const content = `Vous avez été assigné à une nouvelle tâche.`;
+    const newNotif = await createNotification(notifRef, title, content, userRef);
+    console.log('Notification créée:', newNotif);
     
     res.status(201).json({
       message: 'Utilisateur assigné à la tâche avec succès.',
@@ -66,6 +75,13 @@ export const deleteAssignmentController = async (req, res) => {
       return res.status(404).json({ error: 'Assignation introuvable' });
     }
 
+    //Notification de la suppression d'assignation
+    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+    const title = 'Assignation de tâche supprimée';
+    const content = `Votre assignation à une tâche a été supprimée.`;
+    const newNotif = await createNotification(notifRef, title, content, result.userRef);
+    console.log('Notification créée:', newNotif);
+    
     res.status(200).json({ message: 'Assignation supprimée avec succès' });
 
   } catch (error) {

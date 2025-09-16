@@ -3,20 +3,18 @@
                         <div class="title">
                             <h1>OpenTaskz</h1>
                         </div>
-                        <div class="menu">
-                            <Menu />
-                        </div>
                         <div class="notifs">
                             <Notifications />
                             <div v-if="!isLoading" class="profile">
                                 <div class="prof-img" @click="isAccountOpen = !isAccountOpen">
-                                    <img :src="`../assets/${data.profileImage}.png`" :alt="data.firstName">
+                                    <img :src="`../assets/uploads/profiles/${data.profileImage}.png` || `../assets/uploads/profiles/Defautlt-avatar.png`" :alt="data.firstName">
                                 </div>
                                 <div class="username">
                                     <p>{{data.firstName}} {{data.lastName}}</p>
                                 </div>
                                 <div class="account" v-show="isAccountOpen">
                                     <ul>
+                                        <li class="user">{{data.firstName}} {{data.lastName}}</li>
                                         <li><router-link to="/profile" class="link">My Account</router-link></li>
                                         <li><router-link to="/usersConditions" class="link">GCU</router-link></li>
                                         <li><router-link to="/legalNotice" class="link">Legal notice</router-link></li>
@@ -84,7 +82,8 @@
         height: 50px;
         background-color:#eee;
         padding: 10px;
-        position: absolute;
+        position: fixed;
+        z-index: 100;
         top: 0;
         left:0;
         box-shadow: 0 0 300px rgba(0, 0, 0, 0.3);
@@ -96,42 +95,12 @@
             align-items: center;
             padding-left: 30px;
 
+            @media (max-width: 768px) {
+                width: 30%;
+            }
+
             h1{
                 color: #004581;
-            }
-        }
-        .menu{
-            width: 30%;
-        }
-        .search{
-            display: flex;
-            gap: 0;
-            justify-content: center;
-            width: 25%;
-            padding: 10px;
-
-            input{
-                width: 65%;
-                border-top-left-radius: 5px;
-                border-bottom-left-radius: 5px;
-                border: 1px solid #948a8a42;
-                border-right: none;
-                margin-right:0;
-                padding-left: 10px;
-                font-size: 0.8rem;
-            }
-            button{
-                width: 35px;
-                border-top-right-radius: 5px;
-                border-bottom-right-radius: 5px;
-                border: none;
-                background-color: #c2dff8;
-                font-weight: 700;
-                cursor: pointer;
-                img{
-                    width: 20px;
-                    height: 20px;
-                }
             }
         }
         .notifs{
@@ -139,7 +108,7 @@
             display: flex;
             justify-content: space-around;
             align-items: center;
-            width: 20%;
+            width: 40%;
             .username{
                 width: 50%;
                 display: flex;
@@ -148,6 +117,10 @@
                 font-size: 0.8rem;
                 font-weight: 400;
                 color: #004581;
+
+                @media (max-width: 768px) {
+                    display: none;
+                }
             }
             .account{
                 position: absolute;
@@ -160,10 +133,26 @@
                 border-radius: 10px;
                 box-shadow: 0 0 100px rgba(0, 0, 0, 0.3);
                 color: #948a8adc;
+                transition: all .3s ease-in-out;
 
+                @media (max-width: 768px) {
+                    left: -125%;
+                    top: 50px;
+                    width: 300px;
+                    text-align: right;
+                    padding-right: 10px;
+                }
                 ul{
                     margin: O;
                     padding: 0;
+
+                    .user{
+                        display: none;
+                        @media (max-width: 768px) {
+                            display: block;
+                            font-weight: bold;
+                        }
+                    }
                     li{
                         border-bottom: 1px solid #30495f88; 
                         &:hover{

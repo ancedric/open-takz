@@ -11,10 +11,10 @@ import assignmentRouter from './routes/assignment.routes.js';
 import userRouter from './routes/user.routes.js';
 import projectRouter from './routes/project.routes.js';
 import taskRouter from './routes/task.routes.js';
-//import emailRouter from './routes/email.routes.js';
+import emailRouter from './routes/email.routes.js';
 import collabRouter from './routes/collaborator.routes.js';
 import teamRouter from './routes/team.routes.js';
-//import notificationsRouter from './routes/notifications.routes.js';
+import notificationsRouter from './routes/notification.routes.js';
 
 //options de stockage pour multer
 const storage = multer.diskStorage({
@@ -53,7 +53,7 @@ app.use('/assignment', assignmentRouter);
 app.use('/email', emailRouter);
 app.use('/collab', collabRouter);
 app.use('/team', teamRouter);
-//app.use('/notification', notificationsRouter);
+app.use('/notification', notificationsRouter);
 
 
 app.use(express.static(path.join(__dirname, 'dist')));

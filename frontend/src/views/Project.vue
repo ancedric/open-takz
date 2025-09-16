@@ -48,7 +48,7 @@ import AddTaskBar from '../components/AddTaskBar.vue'
     const ongoing = ref('ongoing')
     const completed = ref('completed')
     const validated = ref('validated')
-    const foundMember = ref('null')
+    const foundMember = ref(null)
 
         // Calcul des années à afficher dans le sélecteur
 
@@ -57,25 +57,38 @@ import AddTaskBar from '../components/AddTaskBar.vue'
             for (let i = 0; i < 5; i++) {
                 years.push(currentYear.value - i);
             }
-            return years.sort((a, b) => b - a); // Ordre décroissant (année actuelle en haut)
+            return years.sort((a, b) => b - a); 
         });
 
     function getTaskStyle(task) {
-        const start = new Date(task.startDate);
-        const end = new Date(task.endDate);
+    const start = new Date(task.startdate);
+    const end = new Date(task.enddate);
 
-        if (start.getMonth() !== currentMonth.value && end.getMonth() !== currentMonth.value) return {};
+    // Vérifie si la tâche est visible dans le mois en cours
+    const currentMonthDate = new Date(currentYear.value, currentMonth.value);
+    const startOfCurrentMonth = new Date(currentYear.value, currentMonth.value, 1);
+    const endOfCurrentMonth = new Date(currentYear.value, currentMonth.value + 1, 0);
 
-        const offset = start.getDate() - 1;
-        const duration = end.getDate() - start.getDate() + 1;
-
-        console.log(`Task: ${task.taskname}, offset: ${offset}, duration: ${duration}`);
-
-        return {
-            '--offset': offset,
-            '--duration': duration
-        };
+    // La tâche commence avant la fin du mois ET se termine après le début du mois
+    if (start > endOfCurrentMonth || end < startOfCurrentMonth) {
+        return {}; // La tâche n'est pas dans le mois en cours
     }
+
+    // Calcul de l'offset (décalage de départ)
+    const startDateInMonth = Math.max(start.getDate(), 1); // La tâche commence au plus tôt le 1er du mois
+    const offset = startDateInMonth - 1; // L'offset est basé sur l'index (0-basé)
+
+    // Calcul de la durée
+    const endDateInMonth = Math.min(end.getDate(), daysInMonth.value.length); // La tâche se termine au plus tard le dernier jour du mois
+    const duration = endDateInMonth - startDateInMonth + 1; // Durée en jours
+
+    console.log(`Task: ${task.taskname}, offset: ${offset}, duration: ${duration}`);
+
+    return {
+        '--offset': offset,
+        '--duration': duration
+    };
+}
 
 const generateYearCalendar = (year) => {
     const days = [];
@@ -95,18 +108,33 @@ const generateYearCalendar = (year) => {
 };
 
 const populateTasksInCalendar = () => {
-    if (!currentProject.value.task) return;
+    // Vérifie si le projet contient des tâches avant de continuer
+    if (!currentProject.value.tasks || !currentProject.value.tasks.length) {
+        return;
+    }
 
-    currentProject.value.task.forEach(task => {
-        const startDate = new Date(task.startdate);
-        const endDate = new Date(task.enddate);
+    // Normaliser les dates des tâches au début du jour pour une comparaison fiable
+    const normalizedTasks = currentProject.value.tasks.map(task => {
+        return {
+            ...task,
+            startDate: new Date(task.startdate).setHours(0, 0, 0, 0),
+            endDate: new Date(task.enddate).setHours(0, 0, 0, 0)
+        };
+    });
 
-        daysInYear.value.forEach(day => {
-            if (day.date >= startDate && day.date <= endDate) {
-                day.hasTask = true;
-                day.tasks.push(task);
+    // Normaliser les dates du calendrier pour les comparer avec les dates des tâches
+    const normalizedDays = daysInYear.value.map(day => new Date(day.date).setHours(0, 0, 0, 0));
+
+    normalizedTasks.forEach(task => {
+        for (let i = 0; i < normalizedDays.length; i++) {
+            const dayTimestamp = normalizedDays[i];
+
+            // Comparez les horodatages qui sont des nombres et sont fiables
+            if (dayTimestamp >= task.startdate && dayTimestamp <= task.enddate) {
+                daysInYear.value[i].hasTask = true;
+                daysInYear.value[i].tasks.push(task);
             }
-        });
+        }
     });
 };
 
@@ -574,11 +602,12 @@ const calculateTimeRemaining = (startDate, endDate) => {
     const searchMemberByEmail = async (email) => {
         try{
             isMembersLoading.value = true;
+            console.log("DEBUG: Recherche du membre ", email)
             const response = await axios.get(
-                `${import.meta.env.VITE_API_URL}/user/search?email=${email}`
+                `${import.meta.env.VITE_API_URL}/user/email/${email}`
             );
+            console.log("DEBUG: Répose de recherche: ", response.data)
             if (response.data?.data) {
-                console.log("Membre trouvé:", response.data.data);
                 isMembersLoading.value = false;
                 foundMember.value = response.data.data;
             } else {
@@ -813,7 +842,7 @@ watch(
                                 </div>
                             </div>
                             <div class="tasks-progression">
-                                <div v-if="currentProject.tasks && currentProject.tasks.length > 0">
+                                <div v-if="currentProject.task && currentProject.task.length > 0">
                                     <h4>Recent Tasks Progression</h4>
                                     <ul>
                                         <li v-for="task in currentProject.tasks.slice(-3).reverse()" :key="task.taskRef">
@@ -1124,13 +1153,13 @@ watch(
                 <div class="member-card" v-if="isMembersLoading">
                     <Spinner/>
                 </div>
-                <div class="member-card" v-else v-for="(member, index) in currentProject.team" :key="index">
-                    <img :src="member.profilePhotoUrl" alt="Member Image" class="member-image">
+                <div class="member-card" v-else>
+                    <img :src="foundMember.profilePhotoUrl" alt="Member Image" class="member-image">
                     <div class="member-info">
-                        <h3>{{ member.firstname }} {{ member.lastname }}</h3> 
-                        <p>{{ member.email }}</p>
+                        <h3>{{ foundMember.firstname }} {{ foundMember.lastname }}</h3> 
+                        <p>{{ foundMember.email }}</p>
                     </div>
-                    <button class="invite-btn" @click="sendInvitation(member.email, currentProject.projectref)">Invite</button>
+                    <button class="invite-btn" @click="sendInvitation(foundMember.email, currentProject.project.projectref)">Invite</button>
                 </div>
             </div>
             
@@ -1148,9 +1177,20 @@ watch(
         margin-top: 50px;
         padding-top: 30px;
 
+        @media (max-width: 768px) {
+            flex-direction: column;
+            align-items: center;
+            
+        }
+
         .project-sideBar{
             padding: 20px;
             width: 20%;
+
+            @media (max-width: 768px) {
+                width: 100%;
+                margin-bottom: 20px;
+            }
 
             .search{
                 display: flex;
@@ -1184,11 +1224,6 @@ watch(
                 }
             }
             .createBtn{
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                gap: 10px; 
-                width: 200px;
                 border-radius: 5px;
                 border: none;
                 margin-left:10px;
@@ -1204,6 +1239,10 @@ watch(
             .projectsList-ctn{
                 background-color: #c2dff83a;
 
+                @media (max-width: 768px) {
+                    margin-top: 20px;
+                }
+
                 .projects-list{
                     padding-top: 15px;
                     .collapsible {
@@ -1218,6 +1257,30 @@ watch(
                         background: #f8f8f8;
                         height: 65vh;
                         overflow-y: scroll;
+
+                        @media (max-width: 768px) {
+                            position: absolute;
+                            left: 0;
+                            top: 33%;
+                            width: 100vw;
+                            height: 60vh;
+                            overflow-y: scroll;
+                            font-size: 0.9rem;
+                            transition: all .3s ease-in-out;
+                            z-index: 10;
+                            animation: open .5s ease-in-out;
+                        }
+
+                        @keyframes open {
+                            from {
+                                opacity: 0;
+                                height: 0;
+                            }
+                            to {
+                                opacity: 1;
+                                height: 60vh;
+                            }
+                        }
                     }
 
                     .projName {
@@ -1242,6 +1305,10 @@ watch(
                         font-size: 0.7em;
                         color: #666;
                         margin-top: 4px;
+
+                        @media (max-width: 768px) {
+                            display: none;
+                        }
                     }
 
                 }
@@ -1265,6 +1332,10 @@ watch(
                             font-weight: bold;
                             font-size: 1rem;
                             padding: 5px;
+
+                            @media (max-width: 768px) {
+                                font-size: 0.9rem;
+                            }
                         }
                     }
                     .proj-team{
@@ -1289,6 +1360,11 @@ watch(
                                 gap: 20px;
                                 width: 70%;
                                 padding: 15px;
+
+                                @media (max-width: 768px) {
+                                    width: 55%;
+                                    gap: 10px;
+                                }
                                 .team-members{
                                     min-width: 300px;
                                     display: flex;
@@ -1299,6 +1375,11 @@ watch(
                                         width: 30px;
                                         height: 30px;
                                         border-radius: 50%;
+
+                                        @media (max-width: 768px){
+                                            width: 20px;
+                                            height: 20px;
+                                        }
                                     }
                                 }
                             }
@@ -1310,11 +1391,21 @@ watch(
                                 width: 30%;
                                 padding:15px;
                                 position : relative;
+                                
+                                @media (max-width: 768px) {
+                                    width: 45%;
+                                }
+
                                 button{
                                     width: 180px;
                                     border: none;
                                     font-weight: 700;
                                     cursor: pointer;
+
+                                    @media (max-width: 768px) {
+                                        width: 80px;
+                                        font-size: 0.7rem;
+                                    }
                                 }
                                 .submenu{
                                     position: absolute;
@@ -1328,6 +1419,11 @@ watch(
                                     padding-right: 10px;
                                     top: 60px;
                                     right: 15px;
+
+                                    @media (max-width:768px){
+                                        width: 80vw;
+
+                                    }
 
                                     ul{
                                         padding: 0;
@@ -1389,9 +1485,17 @@ watch(
                         justify-content: space-between;
                         gap: 10px;
 
+                        @media (max-width: 768px){
+                            flex-direction: column;
+                        }
+
                         .details{
                             width: 50%;
                             padding: 10px;
+
+                            @media (max-width: 768px){
+                                width: 100%;
+                            }
 
                             div{
                                 width: 100%;
@@ -1405,6 +1509,7 @@ watch(
                                 }
                                 p{
                                     font-size: 0.7rem;
+                                    padding: 0 10px;
                                 }
                             }
                         }
@@ -1412,6 +1517,12 @@ watch(
                             width: 50%;
                             border-left: 2px solid #6666667e;
                             padding: 10px;
+
+                            @media (max-width: 768px){
+                                width: 100%;
+                                border-left: none;
+                            }
+
                             div{
                                 width: 100%;
                                 display: flex;
@@ -1486,6 +1597,10 @@ watch(
                         align-items: center;
                         gap: 10px;
                         padding: 10px;
+
+                        @media (max-width: 768px){
+                            flex-direction: column;
+                        }
                         .nb-task{
                             width: 30%;
                             height: 250px;
@@ -1493,6 +1608,10 @@ watch(
                             border: 1px solid #50518183;
                             background-color: #fff;
                             box-shadow: 0 0 50px rgba(0, 0, 0, 0.3);
+
+                            @media (max-width: 768px){
+                                width: 100%;
+                            }
                             .nb-ongoing-tasks,
                             .nb-completed-tasks,
                             .nb-total-tasks{
@@ -1503,6 +1622,12 @@ watch(
                                 flex-direction: column;
                                 justify-content: center;
                                 border-bottom: 1px solid;
+
+                                @media (max-width: 768px){
+                                    flex-direction: row;
+                                    justify-content: space-between;
+                                }
+
                                 h4{
                                     margin: 0;
                                     font-size: 0.8rem;
@@ -1526,6 +1651,10 @@ watch(
                             border: 1px solid #50518183;
                             background-color: #fff;
                             box-shadow: 0 0 50px rgba(0, 0, 0, 0.3);
+
+                            @media (max-width: 768px){
+                                width: 100%;
+                            }
                             div{
                                 h4{
                                     margin: 0;
@@ -1568,6 +1697,9 @@ watch(
                             border: 1px solid #50518183;
                             background-color: #fff;
                             box-shadow: 0 0 50px rgba(0, 0, 0, 0.3);
+                            @media (max-width: 768px){
+                                width: 100%;
+                            }
                             h4{
                                 margin: 0;
                                 font-size: 0.8rem;
@@ -1671,6 +1803,10 @@ watch(
                                 width: 50%;
                                 display: flex;
                                 justify-content: space-between;
+
+                                @media (max-width: 768px){
+                                    width: 100%;
+                                }
                                 .tab-items{
                                     width: 70%;
                                     display: flex;
@@ -1680,11 +1816,20 @@ watch(
                                     margin: 10px;
                                     padding:0;
                                     overflow: hidden;
+                                    @media (max-width: 768px){
+                                        width: 100%;
+                                        border: 1px solid #004581;
+                                    }
                                     .t-item{
                                         color: #505181;
                                         text-align: center;
                                         border: 1px solid;
                                         margin: 0;
+
+                                        @media (max-width: 768px){
+                                            width: 100%;
+                                            font-size: 0.7rem;
+                                        }
 
                                         &:hover{
                                             background-color: #004581;
@@ -1702,7 +1847,7 @@ watch(
                             }
                             .exportation{
                                 width: 50%;
-                                display: flex;
+                                display: none;
                                 justify-content: center;
                                 align-items: center;
 
@@ -1718,8 +1863,16 @@ watch(
                         }
                         .body{
                             width: 100%;
+
+                            @media (max-width: 768px){
+                                overflow-x: scroll;
+                                overflow-y:hidden;
+                            }
                             .view{
                                 width: 100%;
+                                @media (max-width: 768px){
+                                    width: 840px;
+                                }
                                 div{
                                     width: 100%;
                                     .list-header{
@@ -1755,6 +1908,10 @@ watch(
                                                     border: 1px solid #0897e9;
                                                     border-radius: 10px;
                                                     color: #0897e9;
+
+                                                    @media (max-width: 768px){
+                                                        width: 50px;
+                                                    }
                                                 }
                                             }
                                         }
@@ -1763,6 +1920,9 @@ watch(
                             }
                             .view.kb{
                                 width: 100%;
+                                @media (max-width: 768px){
+                                    width: 400vw;
+                                }
                                 div{
                                     width: 100%;
                                     display: flex;
@@ -1780,6 +1940,11 @@ watch(
                                         padding-top: 5px;
                                         margin-top: 20px;
                                         overflow-y: scroll;
+                                        overflow-x: hidden;
+
+                                        @media (max-width: 768px){
+                                            width: 70vw;
+                                        }
 
                                         h3{
                                             width: 100%;
@@ -1896,6 +2061,7 @@ watch(
                                 width: 100%;
                                 display: flex;
                                 justify-content: center;
+                                gap: 10px;
                                 .calendar-container {
                                     display: grid;
                                     grid-template-columns: repeat(53, 15px); /* 53 colonnes pour les semaines */
@@ -1904,15 +2070,14 @@ watch(
                                     width: fit-content;
                                     margin: 20px auto;
                                     position: relative;
-                                    width: 80%;
 
                                     .calendar-day {
-                                        background-color: #e0f2f1; /* Bleu clair */
+                                        background-color: #e0f2f1;
                                         border-radius: 2px;
                                         cursor: pointer;
 
                                         &.task-day {
-                                            background-color: #fde68a; /* Jaune */
+                                            background-color: #fde68a;
                                         }
                                     }
 
@@ -1960,97 +2125,8 @@ watch(
                                                 }
                                             }
                                         }
-
-
-                                   /* .timeline-container {
-                                        display: flex;
-                                        gap: 20px;
-                                        padding: 20px;
-                                        width: 100%;
-
-                                        .timeline-ctn {
-                                            display: flex;
-                                            justify-content: space-around;
-                                            align-items: center;
-                                            border: 1px solid #b1b1b1;
-                                            border-radius: 8px;
-                                            width: 80%;
-                                            overflow-x: scroll;
-                                
-
-                                            .month {
-                                                padding: 10px;
-                                                margin-bottom: 30px;
-
-                                                .month-label {
-                                                    font-size: 1rem;
-                                                    font-weight: 300;
-                                                    color: #333;
-                                                    margin-bottom: 10px;
-
-                                                    
-
-                                                .tasks-in-month {
-                                                    background-color: green;
-                                                    min-height: 30px;
-                                                    padding-left: 20px;
-
-                                                    .task-item {
-                                                    background-color: #f9f9f9;
-                                                    border-left: 3px solid #ddd;
-                                                    padding: 10px;
-                                                    margin-bottom: 8px;
-                                                    border-radius: 4px;
-
-                                                    .task-details {
-                                                        display: flex;
-                                                        justify-content: space-between;
-                                                        align-items: center;
-
-                                                        .elem-title {
-                                                        font-weight: 500;
-                                                        }
-
-                                                        .elem-status {
-                                                        font-size: 0.85em;
-                                                        color: #777;
-                                                        text-align: right;
-
-                                                        .status {
-                                                            margin-bottom: 2px;
-                                                        }
-
-                                                        .remain {
-                                                            font-style: italic;
-                                                        }
-                                                        }
-                                                    }
-                                                    }
-                                                }
-                                            }
-                                            .month-days{
-                                                        width: 200px;
-                                                        height: 200px;
-                                                        display: flex;
-                                                        justify-content: space-around;
-                                                        align-items: center;
-                                                        flex-wrap: wrap;
-                                                        gap: 5px;
-
-                                                        .day{
-                                                            width: 20px;
-                                                            height: 20px;
-                                                            background-color: #1e6d70;
-                                                            border-radius: 3px;
-                                                            text-align: center;
-                                                            color: #eee;
-                                                            font-size: 0.7rem;
-                                                        }
-                                                    }
-                                                }
-                                        }
-                                    }*/
                                 }
+
                                 .view.gt{
                                    .gantt-container {
                                         display: flex;
@@ -2116,240 +2192,169 @@ watch(
                                     }
                                 }
                             }
+                            }
                         }
                     }
                 }
             }
                 
-        }
+        
     
-    .assignees {
-        display: flex;
-        gap: 5px;
-        flex-wrap: wrap;
-    }
+        .assignees {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
 
-    .assignee-avatar {
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        object-fit: cover;
-        border: 2px solid #fff;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
+        .assignee-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
 
-    .assignee-avatar:hover {
-        transform: scale(1.1);
-        transition: transform 0.2s;
-    }
-    .addTask-form{
-        position: absolute;
-        top: 50vh;
-        left: 50vw;
-        transform: translateX(-50%)translateY(-50%);
-        background-color: #c2dff8;
-        width: 450px;
-        padding: 20px;
-        border-radius: 5px;
-        box-shadow: 0 0 100px rgba(0, 0, 0, 0.4);
-        z-index: 10;
-        .task-form{
-            form{
-                display: flex;
-                flex-direction: column;
-                gap: 20px;
-
-                label{
-                    font-size: 0.8rem;
-                    color: #505181;
-                }
-                input{
-                    height: 30px;
-                    padding: 5px;
-                    border-radius: 5px;
-                    border: 1px solid #00458171;
-                    background-color: transparent;
-                    font-size: 0.8rem;
-                }
-                .btn-ctn{
+        .assignee-avatar:hover {
+            transform: scale(1.1);
+            transition: transform 0.2s;
+        }
+        .addTask-form{
+            position: absolute;
+            top: 50vh;
+            left: 50vw;
+            transform: translateX(-50%)translateY(-50%);
+            background-color: #c2dff8;
+            width: 450px;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 100px rgba(0, 0, 0, 0.4);
+            z-index: 10;
+            .task-form{
+                form{
                     display: flex;
-                    justify-content: space-between;
-                    gap: 10px;
-                    button{
-                        width: 100%;
-                        padding: 10px;
+                    flex-direction: column;
+                    gap: 20px;
+
+                    label{
+                        font-size: 0.8rem;
+                        color: #505181;
+                    }
+                    input{
+                        height: 30px;
+                        padding: 5px;
                         border-radius: 5px;
-                        border: none;
-                        background-color: #004581;
-                        color: #c2dff8;
-                        font-weight: bold;
-                        cursor: pointer;
+                        border: 1px solid #00458171;
+                        background-color: transparent;
+                        font-size: 0.8rem;
                     }
-                    .cancel-btn{
-                        background-color: #c2dff8;
-                        color: #004581;
-                        border: 1px solid #004581;
+                    .btn-ctn{
+                        display: flex;
+                        justify-content: space-between;
+                        gap: 10px;
+                        button{
+                            width: 100%;
+                            padding: 10px;
+                            border-radius: 5px;
+                            border: none;
+                            background-color: #004581;
+                            color: #c2dff8;
+                            font-weight: bold;
+                            cursor: pointer;
+                        }
+                        .cancel-btn{
+                            background-color: #c2dff8;
+                            color: #004581;
+                            border: 1px solid #004581;
+                        }
                     }
+                    
                 }
-                
             }
-        }
-        .task-form h3{
-            margin: 0;
-            font-size: 1.2rem;
-            text-align: center;
-        }
-        .task-form p{
-            margin: 0;
-            font-size: 0.8rem;
-            text-align: center;
-        }
-    }
-    .team-form{
-        position: absolute;
-        left: 50vw;
-        top: 50vh;
-        transform: translate(-50%, -50%);
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        justify-content: center;
-        align-items: center;
-        width: 450px;
-        padding: 20px;
-        background-color: #c2dff8;
-        border: 1px solid #948a8a42;
-        border-radius: 12px;
-        z-index: 10;
-        box-shadow: 0 0 100px rgba(0, 0, 0, 0.3);
-        .close-btn{
-            transform: rotate(45deg);
-            background-color: transparent;
-            border: none;
-            cursor: pointer;
-        }
-        h2{
-            font-size: 1.5rem;
-            color: #004581;
-        }
-        .team-search-section{
-            width: 100%;
-            p{
-                font-size: 0.8rem;
-                color: #004581;
+            .task-form h3{
+                margin: 0;
+                font-size: 1.2rem;
                 text-align: center;
             }
-            input{
-                width: 97%;
-                height: 30px;
-                border-radius: 5px;
-                border: 1px solid #948a8a42;
-                padding-left: 10px;
+            .task-form p{
+                margin: 0;
                 font-size: 0.8rem;
-            }
-            .build-btn,.invite-btn{
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                gap: 10px; 
-                width: 100%;
-                height: 30px;
-                border-radius: 5px;
-                border: none;
-                margin-top: 10px;
-                background-color: #004581;
-                color: #eee;
-                font-weight: 700;
-                cursor: pointer;
-                img{
-                    width: 20px;
-                    height: 20px;
-                }
+                text-align: center;
             }
         }
-        .member-research-result{
+        .team-form{
+            position: absolute;
+            left: 50vw;
+            top: 50vh;
+            transform: translate(-50%, -40%);
             display: flex;
             flex-direction: column;
             gap: 10px;
-            width: 100%;
-            height: 200px;
-            overflow-y: auto;
-            padding: 10px;
-            border: 1px solid #948a8a42;   
-            border-radius: 8px;
-            .member-card{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: 10px;
-                width: 95%;
-                height: 50px;
-                padding: 10px;
-                background-color: #fff;
-                border-radius: 8px;
-                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-                .member-image{
-                    width: 50px;
-                    height: 50px;
-                    border-radius: 50%;
-                    object-fit: cover;
-                    background-color: #004581;
+            justify-content: center;
+            align-items: center;
+            width: 450px;
+            padding: 20px;
+            background-color: #c2dff8;
+            border: 1px solid #948a8a42;
+            border-radius: 12px;
+            z-index: 10;
+            box-shadow: 0 0 100px rgba(0, 0, 0, 0.3);
+            .close-btn{
+                transform: rotate(45deg);
+                background-color: transparent;
+                border: none;
+                cursor: pointer;
+            }
+            h2{
+                font-size: 1.5rem;
+                color: #004581;
+            }
+            .team-search-section{
+                width: 100%;
+                p{
+                    font-size: 0.8rem;
+                    color: #004581;
+                    text-align: center;
                 }
-                .member-info{
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    gap: 5px;
-                    width: 55%;
-                    h3{
-                        margin: 0;
-                        font-size: 1rem;
-                        color:#004581;
-                        text-align: center;
-                        vertical-align: middle; 
-                    }
-                    p{
-                        margin: 0;
-                        font-size: 0.8rem;
-                        color:#004581;
-                        text-align: center;
-                        vertical-align: middle;  
-                        font-style: italic;
-                    }
+                input{
+                    width: 97%;
+                    height: 30px;
+                    border-radius: 5px;
+                    border: 1px solid #948a8a42;
+                    padding-left: 10px;
+                    font-size: 0.8rem;
                 }
-                .invite-btn{
+                .build-btn,.invite-btn{
                     display: flex;
                     justify-content: center;
                     align-items: center;
                     gap: 10px; 
-                    width: 25%;
+                    width: 100%;
                     height: 30px;
                     border-radius: 5px;
                     border: none;
+                    margin-top: 10px;
                     background-color: #004581;
                     color: #eee;
                     font-weight: 700;
                     cursor: pointer;
+                    img{
+                        width: 20px;
+                        height: 20px;
+                    }
                 }
             }
-        }
-        .members-list{
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            width: 100%;
-            height: 200px;
-            overflow-y: auto;
-            padding: 10px;
-            border: 1px solid #948a8a42;   
-            border-radius: 8px;
-
-            div{
+            .member-research-result{
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
                 width: 100%;
-                margin:0;
-                padding:0;
-
-                .member-item{
+                height: 200px;
+                overflow-y: auto;
+                padding: 10px;
+                border: 1px solid #948a8a42;   
+                border-radius: 8px;
+                .member-card{
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
@@ -2360,8 +2365,7 @@ watch(
                     background-color: #fff;
                     border-radius: 8px;
                     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-                    
-                    .member-avatar{
+                    .member-image{
                         width: 50px;
                         height: 50px;
                         border-radius: 50%;
@@ -2374,15 +2378,14 @@ watch(
                         justify-content: center;
                         gap: 5px;
                         width: 55%;
-                        
-                        .member-name{
+                        h3{
                             margin: 0;
                             font-size: 1rem;
                             color:#004581;
                             text-align: center;
                             vertical-align: middle; 
                         }
-                        .member-role{
+                        p{
                             margin: 0;
                             font-size: 0.8rem;
                             color:#004581;
@@ -2391,7 +2394,81 @@ watch(
                             font-style: italic;
                         }
                     }
-                    .remove-btn{
+                    .invite-btn{
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        gap: 10px; 
+                        width: 25%;
+                        height: 30px;
+                        border-radius: 5px;
+                        border: none;
+                        background-color: #004581;
+                        color: #eee;
+                        font-weight: 700;
+                        cursor: pointer;
+                    }
+                }
+            }
+            .members-list{
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                width: 100%;
+                height: 200px;
+                overflow-y: auto;
+                padding: 10px;
+                border: 1px solid #948a8a42;   
+                border-radius: 8px;
+
+                div{
+                    width: 100%;
+                    margin:0;
+                    padding:0;
+
+                    .member-item{
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 10px;
+                        width: 95%;
+                        height: 50px;
+                        padding: 10px;
+                        background-color: #fff;
+                        border-radius: 8px;
+                        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                        
+                        .member-avatar{
+                            width: 50px;
+                            height: 50px;
+                            border-radius: 50%;
+                            object-fit: cover;
+                            background-color: #004581;
+                        }
+                        .member-info{
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: center;
+                            gap: 5px;
+                            width: 55%;
+                            
+                            .member-name{
+                                margin: 0;
+                                font-size: 1rem;
+                                color:#004581;
+                                text-align: center;
+                                vertical-align: middle; 
+                            }
+                            .member-role{
+                                margin: 0;
+                                font-size: 0.8rem;
+                                color:#004581;
+                                text-align: center;
+                                vertical-align: middle;  
+                                font-style: italic;
+                            }
+                        }
+                        .remove-btn{
                             display: flex;
                             justify-content: center;
                             align-items: center;
@@ -2405,21 +2482,22 @@ watch(
                             font-weight: 700;
                             cursor: pointer;
                         }
+                    }
+                }
+            }
+            .close{
+                width: 35px;
+                height: 35px;
+                border-radius: 50px;
+                background-color: #c2dff8;
+                border: none;
+                cursor: pointer;
+                img{
+                    transform: rotate(45deg);
+                    object-fit: cover;
+                    object-position: center;
                 }
             }
         }
-        .close{
-            width: 35px;
-            height: 35px;
-            border-radius: 50px;
-            background-color: #c2dff8;
-            border: none;
-            cursor: pointer;
-            img{
-                transform: rotate(45deg);
-                object-fit: cover;
-                object-position: center;
-            }
-        }
-    }
+    
 </style>

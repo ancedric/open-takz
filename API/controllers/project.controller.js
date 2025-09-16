@@ -10,6 +10,7 @@ import { getUserByRef } from './user.controller.js';
 import { createTeam } from '../models/team.model.js';
 import { insertCollaborator } from '../models/collaborator.model.js';
 import { sendEmail } from '../services/email.service.js';
+import { createNotification } from '../models/notification.model.js';
 
 export const createNewProject = async (req, res) => {
   try {
@@ -72,8 +73,15 @@ export const createNewProject = async (req, res) => {
     
     await sendEmail(to, subject, htmlContent);
 
+    //Création de la notification de création de nouveau projet
+    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+    const title = 'Nouveau projet créé';
+    const content = `Le projet "${name}" a été créé avec succès.`;
+    const newNotif = await createNotification(notifRef, title, content, userRef);
+    console.log('Notification créée:', newNotif);
+
     res.status(201).json({
-      message: 'Projet, équipe et collaborateur créés avec succès',
+      message: 'Projet créé avec succès',
       data: {
         project,
         teamRef,
@@ -131,6 +139,13 @@ export const updateProjectByRef = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: 'Project not found' });
     }
+
+    //Création de la notification de mise à jour du projet
+    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+    const title = 'Projet mis à jour';
+    const content = `Le projet "${updated.name}" a été mis à jour avec succès.`;
+    const newNotif = await createNotification(notifRef, title, content, updated.userRef);
+    console.log('Notification créée:', newNotif);
 
     res.status(200).json({ message: 'Project updated', data: updated });
 

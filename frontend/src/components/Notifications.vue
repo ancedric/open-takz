@@ -45,7 +45,7 @@
   }
 
   const getNotifications = async () => {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL}/notification/get/${userStore.user.userRef}`)
+    const response = await axios.get(`${import.meta.env.VITE_API_URL}/notification/user-notifs/${userStore.user.userRef}`)
     if(res.data?.data){
       notifications.value = response.data.data
       countNotifs()
@@ -73,13 +73,11 @@
   };
   
   const markAsRead = async (id) => {
-    const { data, error } = await supabase
-      .from('Notifications')
-      .update({ read: true })
-      .eq('id', id);
-  
-    if (error) {
-      console.log(error);
+    const notif = notifications.value.find(n => n.id === id);
+    if (notif && !notif.isRead) {
+      await axios.put(`${import.meta.env.VITE_API_URL}/notification/update-status/${id}`);
+      notif.isRead = true;
+      countNotifs();
     } else {
       await getNotifications();
     }
@@ -96,6 +94,11 @@
       width: 40px;
       height: 40px;
       position: relative;
+
+      @media (max-width: 768px) {
+        width: 30px;
+        height: 30px;
+      }
     }
     .notifications-icon{
       width: 30px;
@@ -139,9 +142,9 @@
         width: 5px;
         border-radius: 50px;
       }
-      @media screen and (max-width: 860px){
+      @media screen and (max-width: 768px){
         left: -50vw;
-        width: 80vw
+        width: 80vw;
       }
     }
     
@@ -155,14 +158,15 @@
       background-color: #eee;
       border-radius: 10px;
       z-index: 5;
-      @media screen and (max-width: 860px){
-        width: 78%;
+      @media screen and (max-width: 768px){
+        width: 70%;
+        left: 10%;
       }
     }
     .close{
       position: fixed;
       top: 60px;
-      right: 30px;
+      right: 310px;
       width: 10%;
       height: 30px;
       margin: 10px;
@@ -173,7 +177,7 @@
       border-radius: 5px;
       cursor: pointer;
       z-index: 5;
-      @media screen and (max-width: 860px){
+      @media screen and (max-width: 768px){
         right: 65px;
         width: 20%;
       }
