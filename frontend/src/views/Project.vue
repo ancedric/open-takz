@@ -48,6 +48,9 @@ import AddTaskBar from '../components/AddTaskBar.vue'
     const ongoing = ref('ongoing')
     const completed = ref('completed')
     const validated = ref('validated')
+    const foundMember = ref('null')
+
+        // Calcul des années à afficher dans le sélecteur
 
      const displayedYears = computed(() => {
             const years = [];
@@ -56,8 +59,6 @@ import AddTaskBar from '../components/AddTaskBar.vue'
             }
             return years.sort((a, b) => b - a); // Ordre décroissant (année actuelle en haut)
         });
-
-
 
     function getTaskStyle(task) {
         const start = new Date(task.startDate);
@@ -137,8 +138,9 @@ const handleDayHover = (day, event) => {
         y
     };
 };
-
-
+const handleDayLeave = () => {
+    hoveredTaskDetails.value = null;
+};
 
     const getMonthFromString = (dateString) => {
         const parts = dateString.split('-');
@@ -569,7 +571,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
         return days;
     });
 
-    const searchMember = async (email) => {
+    const searchMemberByEmail = async (email) => {
         try{
             isMembersLoading.value = true;
             const response = await axios.get(
@@ -578,11 +580,11 @@ const calculateTimeRemaining = (startDate, endDate) => {
             if (response.data?.data) {
                 console.log("Membre trouvé:", response.data.data);
                 isMembersLoading.value = false;
-                return response.data.data;
+                foundMember.value = response.data.data;
             } else {
                 console.log("Aucun membre trouvé avec cet email.");
                 isMembersLoading.value = false;
-                return null;
+                foundMember.value = null;
             }
     }catch(err){
             console.error("Erreur lors de la recherche du membre:", err);
@@ -1116,7 +1118,7 @@ watch(
             <div class="team-search-section">
                 <p>Invite members to join your team</p>
                 <input type="text" v-model="searchMember" placeHolder="Enter email address..." class="project-input" />
-                <button class="build-btn" @click="searchMember">Search <div><img src="../assets/icons/search.png" alt=""></div></button>
+                <button class="build-btn" @click="searchMemberByEmail(searchMember)">Search <div><img src="../assets/icons/search.png" alt=""></div></button>
             </div>
             <div class="member-research-result">
                 <div class="member-card" v-if="isMembersLoading">
