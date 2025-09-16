@@ -1,7 +1,7 @@
 <template>
         <div class="form-ctn">
             <h4>New Project</h4>
-            <form class="project-form" action="" @submit.prevent="submitTask()">
+            <form class="project-form" action="" @submit.prevent="submitProject()">
                 <div class="buttons">
                         <input type="submit" class="send-btn" value="Save Project">
                         <button type="button" class="dismiss-btn" @click="close()">Dismiss</button>
@@ -104,7 +104,7 @@ const close = () =>{
     resetForm()
     emit('closeForm')
 }
-const submitTask = async () => {
+const submitProject = async () => {
     // Validation
     if(!projectName.value || !projectDescription.value || !projectStartDate.value) {
         notFilled.value = true
@@ -126,7 +126,7 @@ const submitTask = async () => {
         
         // Ajoutez le fichier s'il existe
         if (file.value) {
-        formData.append('file', file.value)
+            formData.append('file', file.value)
         }
 
         console.log('Envoi des données:')
@@ -137,12 +137,12 @@ const submitTask = async () => {
 
         const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/project/new-project`, 
-        formData,
-        {
+        formData//,
+        /*{
             headers: {
             'Content-Type': 'multipart/form-data'
             }
-        }
+        }*/
         )
 
         if (response.status === 201) {

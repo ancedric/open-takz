@@ -7,12 +7,13 @@ import {
   updateProjectByRef,
   deleteProjectByRef
 } from '../controllers/project.controller.js';
+import upload from '../services/multerConfig.js';
 
 import { isAuthenticated } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
-router.post('/new-project', isAuthenticated, createNewProject);
+router.post('/new-project', isAuthenticated,  upload.single('file'), createNewProject);
 router.get('/get-projects/:userRef', isAuthenticated, fetchUserProjects);
 router.get('/all-projects', isAuthenticated, fetchAllProjects);
 router.get('/:projectRef', isAuthenticated, fetchProjectByRef);

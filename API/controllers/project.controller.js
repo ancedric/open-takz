@@ -6,27 +6,32 @@ import {
   updateProject,
   deleteProject
 } from '../models/project.model.js';
-import { getUserByRef } from './user.controller.js';
 import { createTeam } from '../models/team.model.js';
 import { insertCollaborator } from '../models/collaborator.model.js';
 import { sendEmail } from '../services/email.service.js';
 import { createNotification } from '../models/notification.model.js';
+import { findUserByRef } from '../models/user.model.js';
+
 
 export const createNewProject = async (req, res) => {
-  try {
-    const {
+  const {
       name,
-      userref,
-      description = null,
-      type = null,
-      objectives = null,
-      start_date = null
+      userRef,
+      description,
+      type,
+      objectives,
+      start_date
     } = req.body;
 
-    if (!name || !userref) {
+    console.log("DEBUG: createNewProject called with:", name, userRef);
+    if (!name || !userRef) {
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
+    if (req.file) {
+            console.log('File path:', req.file.path);
+    }
+  try {
     // 1. Création du projet
     const now = new Date().toISOString();
     const projectRef = `PROJ_${Math.floor(Math.random() * 1000000)}`;
@@ -51,7 +56,7 @@ export const createNewProject = async (req, res) => {
 
     //Envoie de l'email de notification de création du nouveau projet
     //1. Récupérer l'email de l'utilisateur
-    const newUser = await getUserByRef(userRef);
+    const newUser = await findUserByRef(userRef);
     if (!newUser || !newUser.email) {
       return res.status(400).json({ error: 'Utilisateur non trouvé ou email manquant' });
     }
