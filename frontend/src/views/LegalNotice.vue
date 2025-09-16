@@ -7,7 +7,7 @@
       <p>The G Code, société de services Internet</p>
       <p>Adresse : Beedi Douala</p>
       <p>Téléphone : +237 655 583 365</p>
-      <p>E-mail : ceric.ananga@yahoo.com</p>
+      <p>E-mail : cedric.ananga@yahoo.com</p>
       <h2>Hébergeur</h2>
       <p>Render, www.render.com</p>
       <h2>Directeur de la publication</h2>

@@ -9,12 +9,13 @@ import { useUserStore } from './store/index.js'
 const app =createApp(App)
 const pinia = createPinia()
 
-(async ()=>{
-    const userStore = useUserStore();
-    userStore.init();
+app.use(pinia)
+app.use(router)
 
-    app.use(router)
-    app.use(pinia)
+const userStore = useUserStore();
+
+(async () => {
+    await userStore.init();
     app.mount('#app')
-})()
+})();
 

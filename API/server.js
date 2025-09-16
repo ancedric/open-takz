@@ -50,12 +50,13 @@ app.use('/user', userRouter);
 app.use('/project', projectRouter);
 app.use('/task', taskRouter);
 app.use('/assignment', assignmentRouter);
-//app.use('/email', emailRouter);
+app.use('/email', emailRouter);
 app.use('/collab', collabRouter);
 app.use('/team', teamRouter);
 //app.use('/notification', notificationsRouter);
 
 
+app.use(express.static(path.join(__dirname, 'dist')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });

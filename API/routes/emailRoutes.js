@@ -19,7 +19,7 @@ mailRouter.post('/send-email', async (req, res) => {
     const { to, subject, text } = req.body;
 
     const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: process.env.BREVO_SMTP_USER,
         to,
         subject,
         text,
