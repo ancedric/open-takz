@@ -36,7 +36,7 @@ const upload = multer({ storage });
 // Routes
 
 // Auth & user info
-userRouter.get('/', isAuthenticated, getCurrentUser);   // récupère l'utilisateur courant à partir du token
+userRouter.get('/', isAuthenticated, getCurrentUser); 
 userRouter.post('/login', loginUser);
 userRouter.post('/signup', upload.single('profilePhoto'), signupUser);
 
@@ -47,11 +47,10 @@ userRouter.post('/reset-password', resetPassword);
 userRouter.put('/profile', isAuthenticated, updateProfile);
 
 // Admin / listing
-userRouter.get('/users', isAuthenticated, getUsers);     // optionnellement protégé
-userRouter.get('/:ref', isAuthenticated, getUserByRef);  // idem
-userRouter.get('/email/:email', isAuthenticated, getUserByEmail); // idem
+userRouter.get('/users', isAuthenticated, getUsers);  
+userRouter.get('/email/:email', isAuthenticated, getUserByEmail);
+userRouter.get('/:ref', isAuthenticated, getUserByRef); 
 
-// Déconnexion → côté client uniquement (supprimer le token)
-userRouter.post('/logout', logoutUser); // en JWT, ça peut juste dire "token côté client supprimé"
+userRouter.post('/logout', logoutUser);
 
 export default userRouter;

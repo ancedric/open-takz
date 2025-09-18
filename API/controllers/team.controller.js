@@ -29,7 +29,8 @@ export const getTeamAndMembers = async (req, res) => {
   try {
     const team = await getTeamByProjectRef(projectRef);
     if (!team) {
-      return res.status(404).json({ message: 'Aucune équipe trouvée pour ce projet' });
+      //return res.status(404).json({ message: 'Aucune équipe trouvée pour ce projet' });
+      return res.status(200).json({ team: null, members: [] });
     }
 
     const members = await getTeamMembers(team.teamref);

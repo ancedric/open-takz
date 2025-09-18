@@ -11,12 +11,12 @@
         </div>
         <div class="contain">
           <ul>
-            <li v-for="notification in notifications" :key="notification.notifRef" :class="{read:notification.read === true, unread: notification.read === false}">
-              {{ notification.title }}<br/>
+            <li v-for="notification in notifications" :key="notification.notifref" :class="{read:notification.isread === true, unread: notification.isread === false}">
+              <h3>{{ notification.title }}</h3>
               {{ notification.content }}<br/>
-              {{ formatDateTime(notification.createdAt) }}<br/>
-              <button @click="markAsRead(notification.id)" class="markRead">
-                {{ notification.read ? 'Already read' : 'Mark as read' }}
+              {{ formatDateTime(notification.createdat) }}<br/>
+              <button @click="markAsRead(notification.notifref)" class="markRead">
+                {{ notification.isread ? 'Already read' : 'Mark as read' }}
               </button>
             </li>
           </ul>
@@ -45,8 +45,8 @@
   }
 
   const getNotifications = async () => {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL}/notification/user-notifs/${userStore.user.userRef}`)
-    if(res.data?.data){
+    const response = await axios.get(`${import.meta.env.VITE_API_URL}/notification/user-notifs/${userStore.user.userref}`)
+    if(response.data?.data){
       notifications.value = response.data.data
       countNotifs()
     }
@@ -55,7 +55,7 @@
   };
 
   const countNotifs = () => {
-    unread.value = notifications.value.filter((notif) => !notif.read).length;
+    unread.value = notifications.value.filter((notif) => !notif.isread).length;
   };
 
   const formatDateTime = (dateTime) => {
@@ -73,10 +73,10 @@
   };
   
   const markAsRead = async (id) => {
-    const notif = notifications.value.find(n => n.id === id);
-    if (notif && !notif.isRead) {
+    const notif = notifications.value.find(n => n.notifref === id);
+    if (notif && !notif.isread) {
       await axios.put(`${import.meta.env.VITE_API_URL}/notification/update-status/${id}`);
-      notif.isRead = true;
+      notif.isread = true;
       countNotifs();
     } else {
       await getNotifications();
@@ -132,7 +132,7 @@
       border-radius: 10px;
       border: 3px solid #040649;
       box-shadow: 0 0 30px #eeeeee80;
-      width: 300px;
+      width: 400px;
       height: 70vh;
       padding-top: 60px;
       overflow-y: scroll; 
@@ -166,7 +166,7 @@
     .close{
       position: fixed;
       top: 60px;
-      right: 310px;
+      right: 250px;
       width: 10%;
       height: 30px;
       margin: 10px;
@@ -185,24 +185,26 @@
     .empty,
     .contain{
       padding: 10px;
-      font-size: 0.9rem;
+      font-size: 0.8rem;
       text-align: center;
     }
     .unread{
-      background-color: #04064980;
-      color: #eee;
+      background-color: #898cf580;
+      color: #39329c;
       padding: 5px;
       border-radius: 5px;
       border-bottom: 1px solid;
       margin-bottom: 10px;
+      box-shadow: 0 0 10px #00000080;
     }
     .read{
-      background-color: #a6ada8;
-      color: #eee;
+      background-color: #bbbbbbb4;
+      color: #1d9265;
       padding: 5px;
       border-radius: 5px;
       border-bottom: 1px solid;
       margin-bottom: 10px;
+      box-shadow: 0 0 10px #00000080;
     }
     .markRead{
       background-color: #b6f89cf6;

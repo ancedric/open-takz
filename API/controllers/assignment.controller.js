@@ -10,7 +10,6 @@ import { createNotification } from '../models/notification.model.js';
 export const createAssignmentController = async (req, res) => {
   const { taskRef, collabRef, userRef } = req.body;
 
-  console.log("DEBUG: Données reçues: ", taskRef, collabRef, userRef)
   if (!collabRef || !taskRef || !userRef) {
     return res.status(400).json({
       error: 'collabRef, taskRef and userRef are required.'
@@ -26,8 +25,7 @@ export const createAssignmentController = async (req, res) => {
     const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
     const title = 'Nouvelle assignation de tâche';
     const content = `Vous avez été assigné à une nouvelle tâche.`;
-    const newNotif = await createNotification(notifRef, title, content, userRef);
-    console.log('Notification créée:', newNotif);
+    await createNotification(notifRef, title, content, userRef);
     
     res.status(201).json({
       message: 'Utilisateur assigné à la tâche avec succès.',
@@ -80,7 +78,6 @@ export const deleteAssignmentController = async (req, res) => {
     const title = 'Assignation de tâche supprimée';
     const content = `Votre assignation à une tâche a été supprimée.`;
     const newNotif = await createNotification(notifRef, title, content, result.userRef);
-    console.log('Notification créée:', newNotif);
     
     res.status(200).json({ message: 'Assignation supprimée avec succès' });
 

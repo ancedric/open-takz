@@ -1,7 +1,7 @@
 <template>
                 <div class="header-ctn">
                         <div class="title">
-                            <h1>OpenTaskz</h1>
+                            <h1 @click="home">OpenTaskz</h1>
                         </div>
                         <div class="notifs">
                             <Notifications />
@@ -33,7 +33,6 @@
 <script setup>
     import Spinner from './Spinner.vue'
     import Notifications from './Notifications.vue'
-    import Menu from './Menu.vue'
     import axios from 'axios'
     import { useRouter } from 'vue-router'
     import { ref, toRaw } from 'vue'
@@ -43,9 +42,6 @@
     const router = useRouter()
     const isLoading = ref(true)
     const isAccountOpen = ref(false)
-    const navigateProfile = () => {
-        router.push('/profile')
-    }
 
     // Données calculées pour le profil
     const profileData = () => {
@@ -62,6 +58,9 @@
             email: toRaw(userStore.user.email),
             plan: toRaw(userStore.user.privilege) || 'user' // Exemple de champ supplémentaire
         }
+    }
+    const home = () => {
+        router.push(`/project/${userStore.user.userref}`)
     }
     const logout = async (userRef) => {
         const result = await axios.post(`${import.meta.dotenv.VITE_API_URL}/user/logout/${userRef}`)
@@ -101,6 +100,7 @@
 
             h1{
                 color: #004581;
+                cursor: pointer;
             }
         }
         .notifs{

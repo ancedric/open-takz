@@ -1,27 +1,22 @@
 <script setup>
     import axios from 'axios'
-    import { ref, onMounted, computed, watch, watchEffect } from 'vue'
+    import { ref, onMounted, computed, watch } from 'vue'
     import Header from '../components/Header.vue'
     import Spinner from '../components/Spinner.vue'
     import { useUserStore } from '../store/index'
-import AddTaskBar from '../components/AddTaskBar.vue'
-
-    const projects = ref([])
+    import AddTaskBar from '../components/AddTaskBar.vue'
+    import { useRoute } from 'vue-router'
+    
     const open = ref(true)
     const selectedProjectId = ref()
-    const ganttContainer = ref(null);
     const calendarContainer = ref(null); 
     const currentYear = ref(new Date().getFullYear());
     const daysInYear = ref([]);
     const hoveredTaskDetails = ref(null);
     const currentMonth = ref(new Date().getMonth());
-    const currentProject = ref({
-        project:{},
-        task: [],
-        team:[]
-    })
     const userStore = useUserStore()
-    const displayedProjects = ref([])
+    const projects = computed(() => userStore.projects);
+    const route = useRoute()
     const success = ref(false)
     const errors = ref(false)
     const isProjectsLoading = ref(true)
@@ -52,7 +47,7 @@ import AddTaskBar from '../components/AddTaskBar.vue'
 
         // Calcul des années à afficher dans le sélecteur
 
-     const displayedYears = computed(() => {
+    const displayedYears = computed(() => {
             const years = [];
             for (let i = 0; i < 5; i++) {
                 years.push(currentYear.value - i);
@@ -109,12 +104,12 @@ const generateYearCalendar = (year) => {
 
 const populateTasksInCalendar = () => {
     // Vérifie si le projet contient des tâches avant de continuer
-    if (!currentProject.value.tasks || !currentProject.value.tasks.length) {
+    if (!userStore.currentProject.project.tasks || !userStore.currentProject.project.tasks.length) {
         return;
     }
 
     // Normaliser les dates des tâches au début du jour pour une comparaison fiable
-    const normalizedTasks = currentProject.value.tasks.map(task => {
+    const normalizedTasks = userStore.currentProject.project.tasks.map(task => {
         return {
             ...task,
             startDate: new Date(task.startdate).setHours(0, 0, 0, 0),
@@ -166,134 +161,7 @@ const handleDayHover = (day, event) => {
         y
     };
 };
-const handleDayLeave = () => {
-    hoveredTaskDetails.value = null;
-};
 
-    const getMonthFromString = (dateString) => {
-        const parts = dateString.split('-');
-        if (parts.length !== 3){
-            return "Format de date invalide"
-        }
-
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10);
-        const day = parseInt(parts[2], 10);
-
-        const dateObject = new Date(year, month - 1, day);
-        return dateObject.getMonth(); // 0 = Janvier, 11 = Décembre
-    }
-
-    const getProjectTeam = async (projectRef) => {
-        try {
-            const response = await axios.get(
-                `${import.meta.env.VITE_API_URL}/team/project/${projectRef}`
-            );
-            if (response.data?.members) {
-                isMembersLoading.ref = false
-
-                return response.data.members;
-            }
-            return []; // Retourne un tableau vide si pas d'équipe
-        } catch (error) {
-            console.error("Error fetching team:", error);
-            return []; // Retourne un tableau vide en cas d'erreur
-        }
-    };
-
-    const getProjectTasks = async (projectRef) => {
-        try {
-            const response = await axios.get(
-                `${import.meta.env.VITE_API_URL}/task/get-tasks/${projectRef}`
-            );
-            
-            if (response.data?.data) {
-                // Pour chaque tâche, récupérer les assignations
-                const tasksWithAssignments = await Promise.all(
-                    response.data.data.map(async task => {
-                        const assignments = await getTaskAssignments(task.taskref);
-                        return {
-                            ...task,
-                            assignments
-                        };
-                    })
-                );
-                return tasksWithAssignments;
-            }
-            return [];
-        } catch (error) {
-            console.error("Error fetching tasks:", error);
-            return [];
-        }
-    };
-
-    const getTaskAssignments = async (taskRef) => {
-    try {
-        const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/assignment/get-assignments/${taskRef}`
-        );
-
-        if (response.data?.data) {
-            const assignments = response.data.data;
-
-            // Pour chaque assignation, on récupère les détails de l'utilisateur assigné
-            const assignmentsWithUserDetails = await Promise.all(
-                assignments.map(async assignment => {
-                    if(!assignment && !assignment.userref){
-                        return {
-                            ...assignment,
-                            user: null
-                        }
-                    }
-                    const userDetails = await getTeamUser(assignment.userref); 
-                    // Renvoie l'assignation enrichie des infos de l'utilisateur
-                    return {
-                        ...assignment,
-                        user: userDetails
-                    };
-                })
-            );
-            return assignmentsWithUserDetails;
-        }
-        return [];
-    } catch (error) {
-        console.error("Error fetching assignments:", error);
-        return [];
-    }
-};
-
-    const getProjects = async () => {
-        try {
-            isProjectsLoading.value = true;
-
-            const response = await axios.get(
-                `${import.meta.env.VITE_API_URL}/project/get-projects/${userStore.user.userref}`
-            );
-
-            if (response.data?.data) {
-                const rawProjects = response.data.data;
-
-                // On attend toutes les tâches avec Promise.all
-                const enhancedProjects = await Promise.all(
-                    rawProjects.map(async (project) => {
-                        const tasks = await getProjectTasks(project.projectref);
-                        return {
-                            ...project,
-                            tasks
-                        };
-                    })
-                );
-
-                projects.value = enhancedProjects;
-                displayedProjects.value = [...enhancedProjects];
-            }
-        } catch (error) {
-            console.error("Fetch error:", error);
-            errors.value = true;
-        } finally {
-            isProjectsLoading.value = false;
-        }
-    };
 
     const assignMemberToTask = async (taskRef, memberDataString) => {
         try {
@@ -325,7 +193,7 @@ const handleDayLeave = () => {
         try {
             const project = projects.value.find(p => p.projectref === projectRef)
             if (!project) {
-            currentProject.value = { 
+            userStore.currentProject.project.value = { 
                 project:{},
                 team: [] };
             return;
@@ -334,7 +202,7 @@ const handleDayLeave = () => {
             selectedProjectId.value = project.projectref;
             
             // Initialise currentProject avec team vide
-            currentProject.value = {
+            userStore.currentProject.project.value = {
                 ...project,
                 team: []
             };
@@ -357,15 +225,15 @@ const handleDayLeave = () => {
                         };
                     })
                 );
-                currentProject.value = {
-                    ...currentProject.value,
+                userStore.currentProject.project.value = {
+                    ...userStore.currentProject.project.value,
                     team: membersWithDetails
                 };
             }
 
         } catch (error) {
             console.error('Error setting project:', error);
-            currentProject.value = { team: [] };
+            userStore.currentProject.project.value = { team: [] };
         }
     };
     const getTeamUser = async (userRef) => {
@@ -384,15 +252,6 @@ const handleDayLeave = () => {
         return null;
     }
 };
-
-    function withTimeout(promise, ms) {
-        return Promise.race([
-            promise,
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout after ' + ms + 'ms')), ms)
-            )
-        ]);
-    }
 
 const openOverview = () => {
     isOverviewOpen.value = true
@@ -476,7 +335,7 @@ const submitTask = async ()=> {
                 taskStart: newTaskStart.value,
                 taskEnd: newTaskEnd.value,
                 status: 'ongoing',
-                projectRef: currentProject.value.projectRef,
+                projectRef: userStore.currentProject.project.value.projectRef,
             }
         )
         if (response.data?.message === 'Task created successfully') {
@@ -514,14 +373,14 @@ const setTaskStatus = async (status, taskRef) => {
         errors.value = true
     }
 }
-const sendInvitation = async (memberEmail, projectId) => {
+const sendInvitation = async (memberEmail, projectId, projectname) => {
         try {
             const response = await axios.post(
                 `${import.meta.env.VITE_API_URL}/email/send-email`,
             {
                 to: memberEmail,
                 subject: "Invitation à rejoindre un projet",
-                text: `Vous avez été invité à rejoindre un projetsur Opentaskz!`,
+                text: `Vous avez été invité à rejoindre le projet ${projectname} sur Opentaskz!`,
                 html: `
                 <h1>Rejoignez notre équipe</h1>
                 <p>Cliquez sur le lien ci-dessous pour accepter l'invitation :</p>
@@ -544,11 +403,11 @@ const sendInvitation = async (memberEmail, projectId) => {
     };
 const handleSearch = () => {
     if (searchKey.value) {
-        displayedProjects.value = projects.value.filter(project =>
+        projects.value = projects.value.filter(project =>
             project.projectname.toLowerCase().includes(searchKey.value.toLowerCase())
         )
     } else {
-        displayedProjects.value = [...projects.value] // Reset to original projects
+        projects.value = [...projects.value] // Reset to original projects
     }
 }
 function getProgressColor(percentage) {
@@ -602,11 +461,9 @@ const calculateTimeRemaining = (startDate, endDate) => {
     const searchMemberByEmail = async (email) => {
         try{
             isMembersLoading.value = true;
-            console.log("DEBUG: Recherche du membre ", email)
             const response = await axios.get(
                 `${import.meta.env.VITE_API_URL}/user/email/${email}`
             );
-            console.log("DEBUG: Répose de recherche: ", response.data)
             if (response.data?.data) {
                 isMembersLoading.value = false;
                 foundMember.value = response.data.data;
@@ -622,38 +479,35 @@ const calculateTimeRemaining = (startDate, endDate) => {
         }
 }
 
-onMounted(async () => {
-        await getProjects();
+    onMounted(async () => {
+        await userStore.getProjects();
+        isProjectsLoading.value = false
         daysInYear.value = generateYearCalendar(currentYear.value);
     });
 
-    // Ce watcher gère le chargement des détails du projet quand un projet est sélectionné.
-    watch(selectedProjectId, async (newProjectId) => {
-        console.log("Watcher selectedProjectId déclenché. Nouveau projet ID:", newProjectId);
-        if (newProjectId) {
-            await setCurrentProject(newProjectId);
-        } else {
-            currentProject.value = { project: {}, tasks: [], team: [] };
+    watch(() => route.params.id, async (newId) => {
+        if (newId) {
+            selectedProjectId.value = newId;
+            // Appelez l'action du store pour charger les détails complets du projet
+            await userStore.getProjectDetails(newId);
         }
-    }, { immediate: true }); // immediate: true assure qu'il se déclenche au montage si selectedProjectId a déjà une valeur.
-
+    }, { immediate: true });
     // Ce watcher gère la mise à jour des éléments visuels (calendrier, gantt) quand les tâches du projet courant changent.
     watch(
-        () => currentProject.value.tasks,
+        () => userStore.currentProject.project.tasks,
         (newTasks) => {
-            console.log("Watcher currentProject.value.tasks déclenché, nombre de tâches:", newTasks.length);
             populateTasksInCalendar();
         },
         { deep: true } // Utiliser deep pour surveiller les changements à l'intérieur des objets tâches
     );
 
-watch(
-    () => selectedProjectId.value,
-    (newProjectId) => {
-        // Recharger le projet et donc les tâches lorsque le projet sélectionné change
-        setCurrentProject(newProjectId);
-    }
-);
+    watch(
+        () => selectedProjectId.value,
+        (newProjectId) => {
+            // Recharger le projet et donc les tâches lorsque le projet sélectionné change
+            setCurrentProject(newProjectId);
+        }
+    );
 
 </script>
 
@@ -676,20 +530,21 @@ watch(
                 </div>
                 <div class="projects-list" v-else>
                     <div class="collapsible" @click="open = !open">
-                        Projects ({{ displayedProjects.length }})
+                        Projects ({{ projects.length }})
                     </div>
+                    <div class="refresh" @click="userStore.getProjects">Refresh</div>
                     <div class="collapse-elem" v-show="open">
-                    <div v-if="displayedProjects.length === 0" class="empty-message">
+                    <div v-if="projects.length === 0" class="empty-message">
                         No projects found
                     </div>
                     <ul v-else>
-                        <li v-for="project in displayedProjects" 
-                            :key="project.projectref"
+                        <li v-for="project in projects" 
+                            :key="project.project.projectref"
                             class="projName"
-                            :class="{ current: selectedProjectId === project.projectref }">
-                            <div class="data" @click="setCurrentProject(project.projectref)">
-                                {{ project.projectname }}
-                                <p class="project-desc">{{ project.projectdesc }}</p>
+                            :class="{ current: selectedProjectId === project.project.projectref }">
+                            <div class="data" @click="userStore.setCurrentProject(project.project.projectref)">
+                                {{ project.project.projectname }}
+                                <p class="project-desc">{{ project.project.projectdesc }}</p>
                             </div>
                         </li>
                     </ul>
@@ -704,20 +559,20 @@ watch(
             <div class="main-ctn" v-else>
                 <div class="proj-header">
                     <div class="proj-title">
-                        <p v-if="currentProject">
-                            {{ currentProject.projectname }} - {{ currentProject.projectref }}
+                        <p v-if="userStore.currentProject.project">
+                            {{ userStore.currentProject.project.projectname }} - {{ userStore.currentProject.project.projectref }}
                         </p>
                         <p v-else>No project selected</p>
                         </div>
                         
-                        <div class="proj-team" v-if="currentProject && currentProject.team">
-                            <div class="team" v-if="!Array.isArray(currentProject.team) || currentProject.team.length === 0">
+                        <div class="proj-team" v-if="userStore.currentProject.project && userStore.currentProject.team">
+                            <div class="team" v-if="!Array.isArray(userStore.currentProject.team) || userStore.currentProject.team.length === 0">
                                 <p>No team set...</p>
                             </div>
                             <div class="team" v-else>
                                 <div class="left">
                                     <div class="team-members">
-                                        <img v-for="member in currentProject.team" 
+                                        <img v-for="member in userStore.currentProject.team" 
                                             :key="member.collabref" 
                                             :src="member.user?.profilephotourl || '../assets/images/default-avatar.png'" 
                                             :alt="member.user?.firstname"
@@ -749,12 +604,12 @@ watch(
                     </div>
                 </div>
                 <div class="overview-ctn" v-show="isOverviewOpen">
-                    <div class="overview" v-if="currentProject">
+                    <div class="overview" v-if="userStore.currentProject.project">
                         <div class="details">
                             <div>
                                 <h3>Description</h3>
-                                <p v-if="currentProject&& currentProject.projectdesc">
-                                    {{ currentProject.projectdesc }}
+                                <p v-if="userStore.currentProject.project&& userStore.currentProject.project.projectdesc">
+                                    {{ userStore.currentProject.project.projectdesc }}
                                 </p>
                                 <p v-else>
                                     No description provided
@@ -763,8 +618,8 @@ watch(
                             
                             <div>
                                 <h3>Project Type</h3>
-                                <p v-if="currentProject.projecttype">
-                                    {{ currentProject.projecttype }}
+                                <p v-if="userStore.currentProject.project.projecttype">
+                                    {{ userStore.currentProject.project.projecttype }}
                                 </p>
                                 <p v-else>
                                     No project type provided
@@ -772,8 +627,8 @@ watch(
                             </div>
                             <div>
                                 <h3>Project Objectives</h3>
-                                <p v-if="currentProject.projectcible">
-                                    {{ currentProject.projectcible }}
+                                <p v-if="userStore.currentProject.project.projectcible">
+                                    {{ userStore.currentProject.project.projectcible }}
                                 </p>
                                 <p v-else>
                                     No objectives provided
@@ -781,8 +636,8 @@ watch(
                             </div>
                             <div>
                                 <h3>Start Date</h3>
-                                <p v-if="currentProject.projectstart">
-                                    {{ currentProject.projectstart.split('T')[0] }}
+                                <p v-if="userStore.currentProject.project.projectstart">
+                                    {{ userStore.currentProject.project.projectstart.split('T')[0] }}
                                 </p>
                                 <p v-else>
                                     No start date provided
@@ -792,8 +647,8 @@ watch(
                         <div class="estimations">
                             <div class="attachments">
                                 <h3>Attachments</h3>
-                                <div v-if="currentProject.attachments">
-                                    <div v-for="file in currentProject.attachments" class="file" :key="file.fileRef">
+                                <div v-if="userStore.currentProject.project.attachments">
+                                    <div v-for="file in userStore.currentProject.project.attachments" class="file" :key="file.fileRef">
                                         <p><a :href="file.fileUrl">{{ file.fileName }}</a></p>
                                     </div>
                                 </div>
@@ -810,31 +665,31 @@ watch(
                 </div>
                 <div class="dashboard-ctn" v-show="isDashboardOpen">
                     <h2>Project Dashboard</h2>
-                    <p v-if="currentProject">
+                    <p v-if="userStore.currentProject.project">
                         <div class="top">
                             <div class="nb-task">
                                 <div class="nb-ongoing-tasks">
-                                    <div v-if="currentProject.tasks">
+                                    <div v-if="userStore.currentProject.tasks">
                                         <h4>Ongoing Tasks</h4>
-                                        <p>{{ currentProject.tasks.filter(task => task.status === 'ongoing').length }}</p>
+                                        <p>{{ userStore.currentProject.tasks.filter(task => task.status === 'ongoing').length }}</p>
                                     </div>
                                     <div v-else>
                                         <p>No ongoing tasks available</p>
                                     </div>
                                 </div>
                                 <div class="nb-completed-tasks">
-                                    <div v-if="currentProject.tasks">
+                                    <div v-if="userStore.currentProject.tasks">
                                         <h4>Completed Tasks</h4>
-                                        <p>{{ currentProject.tasks.filter(task => task.status === 'completed').length }}</p>
+                                        <p>{{ userStore.currentProject.tasks.filter(task => task.status === 'completed').length }}</p>
                                     </div>
                                     <div v-else>
                                         <p>No completed tasks available</p>
                                     </div>
                                 </div>
                                 <div class="nb-total-tasks">
-                                    <div v-if="currentProject.tasks">
+                                    <div v-if="userStore.currentProject.tasks">
                                         <h4>Total Tasks</h4>
-                                        <p>{{ currentProject.tasks.length }}</p>
+                                        <p>{{ userStore.currentProject.tasks.length }}</p>
                                     </div>
                                     <div v-else>
                                         <p>No tasks available</p>
@@ -842,10 +697,10 @@ watch(
                                 </div>
                             </div>
                             <div class="tasks-progression">
-                                <div v-if="currentProject.task && currentProject.task.length > 0">
+                                <div v-if="userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0">
                                     <h4>Recent Tasks Progression</h4>
                                     <ul>
-                                        <li v-for="task in currentProject.tasks.slice(-3).reverse()" :key="task.taskRef">
+                                        <li v-for="task in userStore.currentProject.tasks.slice(-3).reverse()" :key="task.taskref">
                                             <p>{{ task.taskname }}</p>
                                             <div :class="{ 'progress-bar': true, completed: task.status === 'completed', ongoing: task.status === 'ongoing' }"> {{ task.status }} </div>
                                         </li>
@@ -861,17 +716,17 @@ watch(
                                     <div 
                                         class="progress"
                                         :style="{
-                                            width: currentProject.task && currentProject.task.length > 0 
-                                                ? `${(currentProject.task.filter(t => t.status === 'completed').length / currentProject.tasks.length) * 100}%` 
+                                            width: userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0 
+                                                ? `${(userStore.currentProject.tasks.filter(t => t.status === 'completed').length / userStore.currentProject.tasks.length) * 100}%` 
                                                 : '0%',
-                                            backgroundColor: currentProject.task && currentProject.task.length > 0
-                                                ? getProgressColor((currentProject.task.filter(t => t.status === 'completed').length / currentProject.task.length) * 100)
+                                            backgroundColor: userStore.currentProject.task && userStore.currentProject.task.length > 0
+                                                ? getProgressColor((userStore.currentProject.task.filter(t => t.status === 'completed').length / userStore.currentProject.task.length) * 100)
                                                 : '#e0e0e0'
                                         }"
                                     ></div>
 
                                 </div>
-                                <p>{{ currentProject.tasks && currentProject.tasks.length > 0 ? ((currentProject.tasks.filter(task => task.status === 'completed').length / currentProject.tasks.length) * 100).toFixed(2) : 0 }}% Complete</p>
+                                <p>{{ userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0 ? ((userStore.currentProject.tasks.filter(task => task.status === 'completed').length / userStore.currentProject.tasks.length) * 100).toFixed(2) : 0 }}% Complete</p>
                             </div>
                             
                         </div>
@@ -882,9 +737,9 @@ watch(
                                 <p>Start Date</p>
                                 <p>End Date</p>
                             </div>
-                            <div v-if="currentProject.tasks && currentProject.tasks.length > 0" class="tasks-list">
+                            <div v-if="userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0" class="tasks-list">
                                 <ul>
-                                    <li v-for="task in currentProject.tasks" :key="task.taskRef">
+                                    <li v-for="task in userStore.currentProject.tasks" :key="task.taskref">
                                         <p>{{ task.taskname }}</p>
                                         <p>{{ task.status }}</p>
                                         <p>{{ task.startDate }}</p>
@@ -903,8 +758,8 @@ watch(
                 </div>
                 <div class="report-ctn" v-show="isReportOpen">
                     <h2>Project Activity Report</h2>
-                    <p v-if="currentProject">
-                        {{ currentProject.projectdesc }}
+                    <p v-if="userStore.currentProject.project">
+                        {{ userStore.currentProject.project.projectdesc }}
                     </p>
                     <p v-else>
                         Select a project to view details
@@ -912,7 +767,7 @@ watch(
                 </div>
                 <div class="tasks-ctn" v-show="isTasksOpen">
                     <h2>Project Tasks</h2>
-                    <div v-if="currentProject">
+                    <div v-if="userStore.currentProject.project">
                         <div class="head">
                             <div class="tabs">
                                 <div class="tab-items">
@@ -936,11 +791,11 @@ watch(
                                         <div class="caption">Deadline</div>
                                     </div>
                                     <div class="list-elem">
-                                        <div v-for="task in currentProject.tasks" :key="task.taskRef" class="task-details">
+                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskRef" class="task-details">
                                             <div class="elem">{{task.taskname}}
                                                 <select @change="assignMemberToTask(task.taskref, $event.target.value)" class="assign">
                                                 <option value="">Assign</option>
-                                                <option v-for="member in currentProject.team" 
+                                                <option v-for="member in userStore.currentProject.team" 
                                                         :value="JSON.stringify({ userRef: member.user.userref, collabRef: member.collabref })"
                                                         :key="member.collabref">
                                                     {{ member.user.firstname }} {{ member.user.lastname }}
@@ -948,12 +803,13 @@ watch(
                                             </select>
                                             </div>
                                             <div class="elem assignees">
-                                                <img v-for="assignment in task.assignments" 
-                                                    :key="assignment.assref"
-                                                    :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
-                                                    :alt="assignment.user?.firstname"
-                                                    :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
-                                                    class="assignee-avatar">
+                                                <template v-for="assignment in userStore.currentProject.assignments" :key="assignment.assref">
+                                                    <img v-if="assignment.taskref === task.taskref" 
+                                                        :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
+                                                        :alt="assignment.user?.firstname"
+                                                        :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
+                                                        class="assignee-avatar">
+                                                </template>
                                             </div>
                                             <div class="elem">{{task.startdate.split('T')[0]}}</div>
                                             <div class="elem">{{task.enddate.split('T')[0]}}</div>
@@ -965,14 +821,15 @@ watch(
                                 <div v-show="isKanbanTabActive">
                                     <div class="states pend">
                                         <h3>To Do</h3>
-                                        <div v-for="task in currentProject.tasks" :key="task.taskref" class="task-card">
+                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
                                             <div class="elem" v-if="task.status==='pending'">
                                                 <div class="elem-title">{{task.taskname}}</div>
                                                 <div class="elem-status"> 
                                                     <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startDate, task.endDate) }} remaining</p>
                                                 </div>
                                                 <div class="elem-members">
-                                                    <img v-for="assignment in task.assignments" 
+                                                    <img v-for="assignment in currentProject.assignments" 
+                                                    v-if="assignment.taskref===task.taskref"
                                                         :key="assignment.assref"
                                                         :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
                                                         :alt="assignment.user?.firstname"
@@ -985,7 +842,7 @@ watch(
                                     </div>
                                     <div class="states prog">
                                         <h3>In Progress</h3>
-                                        <div v-for="task in currentProject.tasks" :key="task.taskref" class="task-card">
+                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
                                             <div class="elem" v-if="task.status==='ongoing'">
                                                 <div class="elem-title">{{task.taskname}}</div>
                                                 <div class="elem-status"> 
@@ -998,7 +855,7 @@ watch(
                                     </div>
                                     <div class="states compl">
                                         <h3>Completed</h3>
-                                        <div v-for="task in currentProject.tasks" :key="task.taskref" class="task-card">
+                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
                                             <div class="elem" v-if="task.status==='completed'">
                                                 <div class="elem-title">{{task.taskname}}</div>
                                                 <div class="elem-status"> 
@@ -1011,7 +868,7 @@ watch(
                                     </div>
                                     <div class="states val">
                                         <h3>Validated</h3>
-                                        <div v-for="task in currentProject.tasks" :key="task.taskref" class="task-card">
+                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
                                             <div class="elem" v-if="task.status==='validated'">
                                                 <div class="elem-title">{{task.taskname}}</div>
                                                 <div class="elem-status"> 
@@ -1082,7 +939,7 @@ watch(
 
 
                                     <!-- Lignes des tâches -->
-                                    <div class="gantt-task-row" v-for="task in currentProject.tasks" :key="task.taskref">
+                                    <div class="gantt-task-row" v-for="task in userStore.currentProject.tasks" :key="task.taskref">
                                         <div class="task-name">{{ task.taskname }}</div>
                                         <div class="task-bar-container">
                                             <div class="task-bar" :style="getTaskStyle(task)"></div>
@@ -1115,18 +972,18 @@ watch(
                 </form>
             </div>
         </div>
-        <div class="team-form" v-show="isTeamFormOpen && currentProject && currentProject.team">
+        <div class="team-form" v-show="isTeamFormOpen && userStore.currentProject.project && userStore.currentProject.team">
             <button class="close-btn" @click="isTeamFormOpen = false">
                 <img src="../assets/icons/plus.png" alt="">
             </button>
             <div class="members-list">
                 <h2>Your team</h2>
                 <!-- Vérification plus robuste -->
-                <div v-if="!Array.isArray(currentProject.team) || currentProject.team.length === 0">
+                <div v-if="!Array.isArray(userStore.currentProject.team) || userStore.currentProject.team.length === 0">
                     <p>No member in the team...</p>
                 </div>
                 <div v-else>
-                    <div v-for="member in currentProject.team" 
+                    <div v-for="member in userStore.currentProject.team" 
                         :key="member.collabRef" 
                         class="member-item">
                         <img :src="member.user?.profilePhotoUrl || '../assets/images/default-avatar.png'" 
@@ -1159,7 +1016,7 @@ watch(
                         <h3>{{ foundMember.firstname }} {{ foundMember.lastname }}</h3> 
                         <p>{{ foundMember.email }}</p>
                     </div>
-                    <button class="invite-btn" @click="sendInvitation(foundMember.email, currentProject.project.projectref)">Invite</button>
+                    <button class="invite-btn" @click="sendInvitation(foundMember.email, userStore.currentProject.project.projectref, userStore.currentProject.project.projectname)">Invite</button>
                 </div>
             </div>
             
@@ -1245,6 +1102,14 @@ watch(
 
                 .projects-list{
                     padding-top: 15px;
+
+                    .refresh{
+                        cursor: pointer;
+                        padding: 10px;
+                        background: #f0f0f0;
+                        margin-bottom: 5px;
+                        text-align: center;
+                    }
                     .collapsible {
                         cursor: pointer;
                         padding: 10px;

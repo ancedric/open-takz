@@ -16,6 +16,9 @@ const userStore = useUserStore();
 
 (async () => {
     await userStore.init();
+    if (userStore.isAuth) {
+        await userStore.getProjects();
+    }
     app.mount('#app')
 })();
 

@@ -23,14 +23,10 @@ export const createNewProject = async (req, res) => {
       start_date
     } = req.body;
 
-    console.log("DEBUG: createNewProject called with:", name, userRef);
     if (!name || !userRef) {
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
-    if (req.file) {
-            console.log('File path:', req.file.path);
-    }
   try {
     // 1. Création du projet
     const now = new Date().toISOString();
@@ -82,8 +78,7 @@ export const createNewProject = async (req, res) => {
     const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
     const title = 'Nouveau projet créé';
     const content = `Le projet "${name}" a été créé avec succès.`;
-    const newNotif = await createNotification(notifRef, title, content, userRef);
-    console.log('Notification créée:', newNotif);
+    await createNotification(notifRef, title, content, userRef);
 
     res.status(201).json({
       message: 'Projet créé avec succès',
@@ -149,8 +144,7 @@ export const updateProjectByRef = async (req, res) => {
     const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
     const title = 'Projet mis à jour';
     const content = `Le projet "${updated.name}" a été mis à jour avec succès.`;
-    const newNotif = await createNotification(notifRef, title, content, updated.userRef);
-    console.log('Notification créée:', newNotif);
+    await createNotification(notifRef, title, content, updated.userRef);
 
     res.status(200).json({ message: 'Project updated', data: updated });
 

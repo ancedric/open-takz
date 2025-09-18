@@ -203,7 +203,7 @@ export const getUsers = async (req, res) => {
 };
 
 export const getUserByRef = async (req, res) => {
-  const userRef = req.params.userref;
+  const userRef = req.params.ref;
   try {
     const user = await findUserByRef(userRef);
     if (!user) {
