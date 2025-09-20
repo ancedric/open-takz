@@ -1,6 +1,8 @@
 <template>
+  <Header />
     <div class="pricing-page">
-      <h1>Tarifs</h1>
+      <div class="page-head"><h1>Pricing</h1></div>
+      
       <div class="plans">
         <div class="plan free">
           <h2>Plan Free</h2>
@@ -11,7 +13,7 @@
             <li>Support par e-mail</li>
           </ul>
           <p class="price">Gratuit</p>
-          <button><router-link to="/register">S'inscrire</router-link></button>
+          <button><router-link class="cta" to="/register">S'inscrire</router-link></button>
         </div>
         <div class="plan pro">
           <h2>Plan Pro</h2>
@@ -95,78 +97,121 @@
     </div>
   </template>
   
+  <script setup>
+  import Header from '../components/Header.vue';
+</script>
   
   <style scoped>
   .pricing-page {
-  max-width: 800px;
-  margin: 40px auto;
-  padding: 20px;
-  background-color: #f9f9f9;
-  border: 1px solid #ddd;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 40px auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+
+    .page-head{
+      text-align: center;
+      margin-bottom: 30px;
+      width: 100%;
+      height: 100px;
+      padding: 20px;
+      background-color: #a9b6f0;
+      h1{
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #333;
+      }
+    }
+    .plans {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+
+      @media(max-width: 768px) {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .plan {
+        margin: 20px;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        width: calc(33.33% - 20px);
+        text-align: center;
+        background-color: #fff;
+        transition: all 0.3s ease;
+
+        &:hover {
+          box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+          transform: translateY(-5px);
+          transition: all 0.3s ease;}
+
+          @media(max-width: 768px) {
+            width: 80%;
+          }
+          &.pro{
+            border: 2px solid #4CAF50;
+            button {
+              background-color: #4CAF50;
+              &:hover {
+                background-color: #45a049;
+              }
+            }
+          }
+
+        h2 {
+          font-size: 1.5rem;
+          margin-bottom: 10px;
+        }
+
+        ul {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+
+        li {
+          margin-bottom: 10px;
+        }
+
+        .price {
+          font-size: 1.2rem;
+          color: #333;
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+
+        button {
+          background-color: #4CAF50;
+          color: #fff;
+          border: none;
+          padding: 10px 20px;
+          font-size: 16px;
+          cursor: pointer;
+
+          &:hover {
+            background-color: #3e8e41;
+          }
+
+          .cta{
+            text-decoration: none;
+            color: #fff; 
+            font-size: 1rem;
+            transition: all .3s ease;
+            &:hover{
+              color: #eee;
+            }
+          }
+        }
+
+    }
+
+  }
 }
 
-.plans {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-}
 
-.plan {
-  margin: 20px;
-  padding: 20px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-  width: calc(33.33% - 20px);
-}
 
-.plan.free {
-  background-color: #dff0d8;
-}
-
-.plan.pro {
-  background-color: #f7f7f7;
-}
-
-.plan.enterprise {
-  background-color: #f0f0f0;
-}
-
-.plan h2 {
-  font-size: 18px;
-  margin-bottom: 10px;
-}
-
-.plan ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.plan li {
-  margin-bottom: 10px;
-}
-
-.plan .price {
-  font-size: 24px;
-  font-weight: bold;
-  margin-bottom: 10px;
-}
-
-.plan button {
-  background-color: #4CAF50;
-  color: #fff;
-  border: none;
-  padding: 10px 20px;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.plan button:hover {
-  background-color: #3e8e41;
-}
-
+.plan 
 .comparison {
   margin-top: 40px;
 }
