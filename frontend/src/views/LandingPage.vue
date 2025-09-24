@@ -17,7 +17,7 @@
             <div class="accroche">Revolutionize your productivity with <b>OpenTaskz</b></div>
             <div class="sub-text">
               <p>We empower your Business by keeping everyone accountable for their work<br>
-              Join thousands of professionals who trust OpenTask to manage their projects</p>
+              Join thousands of professionals who trust OpenTaskz to manage their projects</p>
               <button @click="navigate" class="action">Get Started for Free</button>
             </div>
           </div>
@@ -42,7 +42,7 @@
           <section class="features">
             <div class="feat-header">
               <h2>Manage your timeline with <br> unparalleled efficiency</h2>
-              <p>Experience the ultmate task management solution designed to suit all style of work, with an all-in-one tool that streamliines your workflow and simplifies your daily tasks.</p>
+              <p>Experience the ultmate task management solution designed to suit all style of work, with an all-in-one tool that streamlines your workflow and simplifies your daily tasks.</p>
             </div>
             <div class="feat-ctn">
               <div class="feat-card">
@@ -107,7 +107,7 @@
             <div class="benefs">
               <div class="b-text">
                 <h3>This platform serve as the central location for all your work</h3>
-                <p>By using OpenTaskz, you ca spend more time on team maangement and less time on software-related tasks.</p>
+                <p>By using OpenTaskz, you can spend more time on team mangaement and less time on software-related tasks.</p>
               </div>
               <div class="b-list">
                 <ul>
@@ -181,14 +181,15 @@
               <div class="footer-links">
                 <h5>About</h5>
                 <a href="#" class="link">Company</a>
-                <a href="#" class="link">Support Team</a>
+                <router-link to="support" class="link">Support Team</router-link>
               </div>
               <div class="footer-links">
                 <h5>Company</h5>
                 <router-link to="/usersConditions" class="link">Terms of Use</router-link>
                 <router-link to="privacyPolicy" class="link">Privacy Policy</router-link>
+                <router-link to="legalNotice" class="link">Legal Notice</router-link>
                 <router-link to="#" class="link">FAQs</router-link>
-                <router-link to="legalNotice" class="link">Credits</router-link>
+                <router-link to="credits" class="link">Credits</router-link>
                 <p class="link">Béedi, Douala Cameroon</p>
               </div>
             </div>
@@ -352,7 +353,7 @@
           @media(max-width: 768px){
             font-size: 1.5rem;
             text-align: center;
-            padding: 0 10px;
+            padding: 0 20px;
           }
         }
         .sub-text p{
@@ -668,6 +669,10 @@
             .b-text{
                 text-align: left;
                 margin-bottom: 20px;
+                @media(max-width:768px){
+                  text-align: center;
+                  padding: 0 20px;
+                }
 
                 h3{
                     margin-bottom: 10px;

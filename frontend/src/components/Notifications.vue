@@ -187,6 +187,18 @@
       padding: 10px;
       font-size: 0.8rem;
       text-align: center;
+
+      ul{
+        list-style: none;
+        padding: 0;
+
+        li{
+          text-align: left;
+          font-size: 0.9rem;
+          line-height: 1.4;
+          word-wrap: break-word;
+        }
+      }
     }
     .unread{
       background-color: #898cf580;

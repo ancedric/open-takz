@@ -2,9 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LandingPage from './views/LandingPage.vue'
 import Home from './views/Home.vue'
 import Project from './views/Project.vue'
-import ProjectViewer from './views/ProjectViewer.vue'
-import Teams from './views/Teams.vue'
-import TeamViewer from './views/TeamViewer.vue'
 import AddTask from './components/AddTask.vue'
 import EditTask from './views/EditTask.vue'
 import Tasks from './views/Tasks.vue'
@@ -19,17 +16,14 @@ import UsersConditions from './views/UserSConditions.vue'
 import PrivacyPolicy from './views/PrivacyPolicy.vue'
 import LegalNotice from './views/LegalNotice.vue'
 import Support from './views/Support.vue'
+import Credits from './views/Credits.vue'
 
 const routes = [
   { path: '/', component: LandingPage },
   { path: '/home', component: Home },
   { path: '/project/:userRef', component: Project },
-  { path: '/project-viewer', component: ProjectViewer },
-  { path: '/teams', component: Teams },
-  { path: '/team-viewer', component: TeamViewer },
   { path: '/addTask/:title', component: AddTask },
   { path: '/editTask/:id/title/:title/desc/:description', component: EditTask },
-  { path: '/tasks', component: Tasks },
   { path: '/profile', component: Profile },
   { path: '/auth', component: Login },
   { path: '/register', component: Register },
@@ -41,6 +35,7 @@ const routes = [
   { path: '/privacyPolicy', component: PrivacyPolicy },
   { path: '/legalNotice', component: LegalNotice },
   { path: '/support', component: Support },
+  { path: '/credits', component: Credits },
 ]
 
 const router = createRouter({

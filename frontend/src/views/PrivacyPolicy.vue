@@ -1,6 +1,8 @@
 <template>
+    <Header />
     <div class="politique-confidentialite">
-        <router-link to="/home">Home</router-link>
+      <div class="page-head"><h1>Users Conditions</h1></div>
+        <router-link to="/">Home</router-link>
       <h1>Politique de Confidentialité</h1>
       <p>OpenTask est engagé à protéger la confidentialité et la sécurité des informations personnelles de ses utilisateurs.</p>
       <h2>1. Collecte des informations</h2>
@@ -33,36 +35,41 @@
     </div>
   </template>
   
-  <script>
-  export default {
-    name: 'PolitiqueConfidentialite',
-    data() {
-      return {};
-    },
-    methods: {
-      // Méthode pour télécharger la politique de confidentialité au format PDF
-      downloadPdf() {
+  <script setup>
+    import Header from '../components/Header.vue';
+    const downloadPdf = () => {
         const link = document.createElement('a');
         link.href = 'politique-confidentialite.pdf';
         link.download = 'politique-confidentialite.pdf';
         link.click();
-      },
+      }
       // Méthode pour imprimer la page
-      printPage() {
+    const printPage = () => {
         window.print();
-      },
-    },
-  };
+      }
   </script>
   
   <style scoped>
   .politique-confidentialite {
-  max-width: 800px;
-  margin: 40px auto;
-  padding: 20px;
-  background-color: #f9f9f9;
-  border: 1px solid #ddd;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin: 40px auto;
+    padding: 40px;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+
+  .page-head{
+      text-align: center;
+      margin-bottom: 30px;
+      width: 100%;
+      height: 100px;
+      padding: 20px;
+      background-color: #a9b6f0;
+      h1{
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #333;
+      }
+    }
 }
 
 .politique-confidentialite h1 {
@@ -105,6 +112,7 @@ button {
   padding: 10px 20px;
   font-size: 16px;
   cursor: pointer;
+  margin: 10px;
 }
 
 button:hover {

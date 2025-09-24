@@ -1,10 +1,12 @@
 <template>
     <Header />
     <div class="mentions-legales">
+      <div class="page-head"><h1>Legal Notice</h1></div>
+        <router-link to="/">Home</router-link>
       <h1>Mentions Légales</h1>
-      <p>OpenTask est un service en ligne édité par <strong>The G Code</strong>, société de services Internet ayant son siège social à Beedi Douala.</p>
+      <p>OpenTask est un service en ligne édité par <strong>The Genius Code</strong>, société de services Internet ayant son siège social à Beedi Douala.</p>
       <h2>Éditeur</h2>
-      <p>The G Code, société de services Internet</p>
+      <p>The Genius Code, société d'ingénierie logiciel</p>
       <p>Adresse : Beedi Douala</p>
       <p>Téléphone : +237 655 583 365</p>
       <p>E-mail : cedric.ananga@yahoo.com</p>
@@ -13,15 +15,15 @@
       <h2>Directeur de la publication</h2>
       <p>Cédric ananga, CEO</p>
       <h2>Protection des données personnelles</h2>
-      <p>OpenTask s'engage à protéger les données personnelles de ses utilisateurs.</p>
+      <p>OpenTaskz s'engage à protéger les données personnelles de ses utilisateurs.</p>
       <h2>Propriété intellectuelle</h2>
-      <p>Tous les contenus du site sont la propriété exclusive de The G Code.</p>
+      <p>Tous les contenus du site sont la propriété exclusive de The Genius Code.</p>
       <h2>Responsabilité</h2>
-      <p>OpenTask ne peut être tenu responsable des dommages résultant de l'utilisation de son service.</p>
+      <p>OpenTaskz ne peut être tenu responsable des dommages résultant de l'utilisation de son service.</p>
       <h2>Droit applicable</h2>
       <p>Les présentes mentions légales sont régies par la loi [loi applicable].</p>
       <h2>Contact</h2>
-      <p>Pour toute question ou préoccupation, veuillez contacter <a href="mailto:cedric.ananga@yahoo.com">contact@opentask.com</a>.</p>
+      <p>Pour toute question ou préoccupation, veuillez contacter <a href="mailto:cedric.ananga@yahoo.com">Les développeurs</a>.</p>
     </div>
 </template>
 

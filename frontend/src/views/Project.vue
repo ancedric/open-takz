@@ -5,6 +5,7 @@
     import Spinner from '../components/Spinner.vue'
     import { useUserStore } from '../store/index'
     import AddTaskBar from '../components/AddTaskBar.vue'
+    import ProjectProgressChart from '../components/ProjectProgressChart.vue';
     import { useRoute } from 'vue-router'
     
     const open = ref(true)
@@ -719,8 +720,8 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                             width: userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0 
                                                 ? `${(userStore.currentProject.tasks.filter(t => t.status === 'completed').length / userStore.currentProject.tasks.length) * 100}%` 
                                                 : '0%',
-                                            backgroundColor: userStore.currentProject.task && userStore.currentProject.task.length > 0
-                                                ? getProgressColor((userStore.currentProject.task.filter(t => t.status === 'completed').length / userStore.currentProject.task.length) * 100)
+                                            backgroundColor: userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0
+                                                ? getProgressColor((userStore.currentProject.tasks.filter(t => t.status === 'completed').length / userStore.currentProject.tasks.length) * 100)
                                                 : '#e0e0e0'
                                         }"
                                     ></div>
@@ -758,9 +759,9 @@ const calculateTimeRemaining = (startDate, endDate) => {
                 </div>
                 <div class="report-ctn" v-show="isReportOpen">
                     <h2>Project Activity Report</h2>
-                    <p v-if="userStore.currentProject.project">
-                        {{ userStore.currentProject.project.projectdesc }}
-                    </p>
+                    <div v-if="userStore.currentProject.project">
+                        <ProjectProgressChart />
+                    </div>
                     <p v-else>
                         Select a project to view details
                     </p>
@@ -1126,7 +1127,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                         @media (max-width: 768px) {
                             position: absolute;
                             left: 0;
-                            top: 33%;
+                            top: 40%;
                             width: 100vw;
                             height: 60vh;
                             overflow-y: scroll;
@@ -1321,6 +1322,10 @@ const calculateTimeRemaining = (startDate, endDate) => {
                         font-size: 0.8rem;
                         color: #505181;
                         margin-bottom: 0;
+
+                        @media(max-width: 768px){
+                            font-size: 0.6rem;
+                        }
 
                         ul{
                             display: flex;

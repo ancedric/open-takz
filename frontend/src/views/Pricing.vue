@@ -2,6 +2,7 @@
   <Header />
     <div class="pricing-page">
       <div class="page-head"><h1>Pricing</h1></div>
+        <router-link to="/">Home</router-link>
       
       <div class="plans">
         <div class="plan free">
@@ -26,7 +27,7 @@
             <li>Rapports personnalisés</li>
           </ul>
           <p class="price">$9.99/mois (facturé annuellement) ou $12.99/mois (facturé mensuellement)</p>
-          <button><router-link to="/register">S'abonner</router-link></button>
+          <button><router-link class="cta" to="/register">S'abonner</router-link></button>
         </div>
         <div class="plan enterprise">
           <h2>Plan Entreprise</h2>
@@ -39,7 +40,7 @@
             <li>Rapports personnalisés et analytiques avancées</li>
           </ul>
           <p class="price">Sur demande</p>
-          <button><router-link to="/contact">Nous contacter</router-link></button>
+          <button><router-link class="cta" to="/contact">Nous contacter</router-link></button>
         </div>
       </div>
       <div class="comparison">
@@ -148,15 +149,6 @@
 
           @media(max-width: 768px) {
             width: 80%;
-          }
-          &.pro{
-            border: 2px solid #4CAF50;
-            button {
-              background-color: #4CAF50;
-              &:hover {
-                background-color: #45a049;
-              }
-            }
           }
 
         h2 {

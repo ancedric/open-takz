@@ -1,7 +1,9 @@
 <template>
     <Header/>
     <div class="support">
-      <h1>Support</h1>
+      <div class="page-head">
+        <h1>Support</h1></div>
+        <router-link to="/">Home</router-link>
       <p>Besoin d'aide ? Nous sommes là pour vous aider !</p>
       <div class="support-options">
         <div class="support-option">
@@ -55,12 +57,26 @@ function toggleAnswer(faq) {
   <style scoped>
   .support {
     padding-top: 70px;
-  margin: 40px auto;
-  padding: 20px;
-  background-color: #f9f9f9;
-  border: 1px solid #ddd;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
+    margin: 40px auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+
+    .page-head{
+      text-align: center;
+      margin-bottom: 30px;
+      width: 100%;
+      height: 100px;
+      padding: 20px;
+      background-color: #a9b6f0;
+      h1{
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #333;
+      }
+    }
+  }
 
 .support h1 {
   font-size: 24px;
