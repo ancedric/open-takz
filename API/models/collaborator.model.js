@@ -5,6 +5,15 @@ export const findUserById = async (userRef) => {
   return db.query(query, [userRef]);
 };
 
+export const findCollabByUserRef = async (userref) => {
+  const query = 'SELECT * FROM collaborator WHERE userref = $1';
+  const result = await db.query(query, [userref]);
+  if (result.rowCount === 0) {
+    return null;
+  }
+  return result.rows;
+};
+
 export const findTeamById = async (teamRef) => {
   const query = 'SELECT teamRef FROM teams WHERE id = $1';
   return db.query(query, [teamRef]);

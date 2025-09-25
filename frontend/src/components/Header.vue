@@ -7,7 +7,7 @@
                             <Notifications />
                             <div v-if="!isLoading" class="profile">
                                 <div class="prof-img" @click="isAccountOpen = !isAccountOpen">
-                                    <img :src="`../assets/uploads/profiles/${data.profileImage}.png` || `../assets/uploads/profiles/Defautlt-avatar.png`" :alt="data.firstName">
+                                    <img :src="data.profileImage" :alt="data.firstName">
                                 </div>
                                 <div class="username">
                                     <p>{{data.firstName}} {{data.lastName}}</p>
@@ -50,11 +50,10 @@
             return null
         }
         isLoading.value = false
-        
         return {
             firstName: toRaw(userStore.user.firstname),
             lastName: toRaw(userStore.user.lastname),
-            profileImage: toRaw(userStore.user.profilePhotoUrl) || 'src\assets\images\Default-avatar.png',
+            profileImage: toRaw(userStore.user.profilePhotoUrl) || '/src/assets/uploads/profiles/Default-avatar.png',
             email: toRaw(userStore.user.email),
             plan: toRaw(userStore.user.privilege) || 'user' // Exemple de champ supplémentaire
         }
@@ -70,6 +69,7 @@
         }
     }
     const data = profileData()
+    console.log("Données: ", data)
 </script>
 
 <style scoped>
@@ -190,6 +190,12 @@
                 background-color: #30495f;
                 object-fit: cover;
                 overflow: hidden;
+
+                img{
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                }
             }
         }
     }

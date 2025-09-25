@@ -6,6 +6,7 @@ import {
   getCollaboratorByRef,
   updateCollaboratorRole,
   deleteCollaboratorByRef,
+  findCollabByUserRef,
 } from '../models/collaborator.model.js';
 import { createNotification } from '../models/notification.model.js';
 
@@ -59,7 +60,19 @@ export const getTeamMembers = async (req, res) => {
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 };
-
+export const getCollabUser = async (req, res) => {
+  const { userref } = req.params;
+  try {
+    const result = await findCollabByUserRef(userref);  
+    if (!result) {
+      return res.status(404).json({ message: 'No collaborator found for this user.' });
+    }
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Erreur récupération collaborateur par userRef:', error);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+};
 export const getCollaborator = async (req, res) => {
   const { collabRef } = req.params;
   try {

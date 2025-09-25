@@ -481,7 +481,10 @@ const calculateTimeRemaining = (startDate, endDate) => {
 }
 
     onMounted(async () => {
-        await userStore.getProjects();
+        const userref =route.params.userRef || localStorage.getItem('userRef');
+        if(userref){
+            await userStore.getProjects(userref);
+        }
         isProjectsLoading.value = false
         daysInYear.value = generateYearCalendar(currentYear.value);
     });
@@ -575,7 +578,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                     <div class="team-members">
                                         <img v-for="member in userStore.currentProject.team" 
                                             :key="member.collabref" 
-                                            :src="member.user?.profilephotourl || '../assets/images/default-avatar.png'" 
+                                            :src="member.user?.profilephotourl || '/src/assets/uploads/profiles/Default-avatar.png'" 
                                             :alt="member.user?.firstname"
                                             :title="`${member.user?.firstname} ${member.user?.lastname} - ${member.role}`">
                                     </div>
@@ -806,7 +809,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                             <div class="elem assignees">
                                                 <template v-for="assignment in userStore.currentProject.assignments" :key="assignment.assref">
                                                     <img v-if="assignment.taskref === task.taskref" 
-                                                        :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
+                                                        :src="assignment.user?.profilephotourl || '/src/assets/uploads/profiles/Default-avatar.png'"
                                                         :alt="assignment.user?.firstname"
                                                         :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
                                                         class="assignee-avatar">

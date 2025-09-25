@@ -54,100 +54,86 @@ export const useUserStore = defineStore('user', () => {
     }
 
 // Action pour charger TOUTES les données de tous les projets de l'utilisateur
-    const getProjects = async () => {
-        try {
-            // Étape 1: Récupérer la liste des projets de l'utilisateur
-            const projectsRes = await axios.get(`${import.meta.env.VITE_API_URL}/project/get-projects/${user.value.userref}`);
-            const projectsList = projectsRes.data.data;
-            
-            // Pour chaque projet, on charge tous les détails
-            const detailedProjectsPromises = projectsList.map(async (project) => {
-                const projectRef = project.projectref;
-                
-                // Requêtes parallèles pour les tâches et l'équipe
-                const [tasksRes, teamRes] = await Promise.all([
-                    axios.get(`${import.meta.env.VITE_API_URL}/task/get-tasks/${projectRef}`),
-                    axios.get(`${import.meta.env.VITE_API_URL}/team/project/${projectRef}`)
-                ]);
-                
-                // Récupération des détails de l'équipe
-                if (teamRes.data.members === undefined) {
-                  return {
-                    project: project,
-                    tasks: tasksRes.data.data,
-                    team: [],
-                    assignments: []
-                  };
-                }
-                const teamWithUserDetails = await Promise.all(
-                  teamRes.data.members.map(async (member) => {
-                        if(member.userref === undefined) {
-                          return {
-                            ...member,
-                            user: []
-                          };
-                        }
-                        const userRes = await axios.get(`${import.meta.env.VITE_API_URL}/user/${member.userref}`);
-                        return {
-                            ...member,
-                            user: userRes.data.data
-                        };
-                    })
-                );
-                
-                // Récupération des assignations pour CHAQUE tâche, puis des infos utilisateurs
-                if (tasksRes.data.data.length === 0) {
-                  return {
-                    project: project,
-                    tasks: [],
-                    team: teamWithUserDetails,
-                    assignments: []
-                  };
-                }
-                const assignmentsPromises = tasksRes.data.data.map( async task =>{
-                    return await axios.get(`${import.meta.env.VITE_API_URL}/assignment/get-assignments/${task.taskref}`)
-                });
-                const assignmentsResponses = await Promise.all(assignmentsPromises);
-                
-                const allAssignments = [].concat(...assignmentsResponses.map(res => {
-                  if(res.data.data === undefined) {
-                    return [];
-                  }
-                  return res.data.data
-                }));
-                
-                // Pour chaque assignation, récupérer les détails utilisateur
-                
-                const assignmentsWithUserDetailsPromises = allAssignments.map(async (assignment) => {
-                    if(assignment.userref === undefined || assignment.userref === null) {
-                      return {
-                        ...assignment,
-                        user: []
-                      };
-                    }
-
-                    const userRes = await axios.get(`${import.meta.env.VITE_API_URL}/user/${assignment.userref}`);
-                    return {
-                        ...assignment,
-                        user: userRes.data.data
-                    };
-                });
-                
-                const assignmentsWithUserDetails = await Promise.all(assignmentsWithUserDetailsPromises);             
-                // Retourne l'objet projet complet
-                return {
-                    project: project,
-                    tasks: tasksRes.data.data,
-                    team: teamWithUserDetails,
-                    assignments: assignmentsWithUserDetails
-                };
-            });
-            
-            projects.value = await Promise.all(detailedProjectsPromises);
-
-        } catch (err) {
-            console.error('Erreur lors du chargement des projets:', err);
+    const getProjects = async (userRef) => {
+      try {
+        if (!userRef) {
+          console.warn('Aucun utilisateur connecté ou userref manquant.');
+          projects.value = [];
+          return;
         }
+
+        // 1. Récupérer les collaborations de l'utilisateur.
+        const collaborationsRes = await axios.get(`${import.meta.env.VITE_API_URL}/collab/get-collab-user/${userRef}`);
+        const collaborations = collaborationsRes.data;
+        
+        if (!collaborations || collaborations.length === 0) {
+          // Si aucune collaboration n'est trouvée, charger ses propres projets
+          await loadUserOwnedProjects(); 
+          return;
+        }
+
+        // 2. Pour chaque collaboration, on récupère l'équipe associée.
+        const uniqueTeamRefs = [...new Set(collaborations.map(c => c.teamref))];
+        const teamPromises = uniqueTeamRefs.map(teamRef => 
+          axios.get(`${import.meta.env.VITE_API_URL}/team/get-team-collab/${teamRef}`)
+        );
+        const teamResponses = await Promise.all(teamPromises);
+        const teams = teamResponses.map(res => res.data);
+
+        // 3. Pour chaque équipe, on récupère le projectRef associé.
+        const projectRefs = teams.map(t => t.projectref);
+        const uniqueProjectRefs = [...new Set(projectRefs)]; // Éliminer les doublons
+        
+        if (uniqueProjectRefs.length === 0) {
+          projects.value = [];
+          return;
+        }
+
+        // 4. Pour chaque projectRef, on récupère les détails du projet.
+        const detailedProjectsPromises = uniqueProjectRefs.map(async (projectRef) => {
+
+          const [projectRes, tasksRes, teamRes] = await Promise.all([
+              axios.get(`${import.meta.env.VITE_API_URL}/project/${projectRef}`),
+              axios.get(`${import.meta.env.VITE_API_URL}/task/get-tasks/${projectRef}`),
+              axios.get(`${import.meta.env.VITE_API_URL}/team/project/${projectRef}`)
+          ]);
+          
+          const teamWithUserDetails = teamRes.data.members ? await Promise.all(
+              teamRes.data.members.map(async (member) => {
+                  const userRes = await axios.get(`${import.meta.env.VITE_API_URL}/user/${member.userref}`);
+                  return { ...member, user: userRes.data.data };
+              })
+          ) : [];
+          
+          const assignmentsPromises = tasksRes.data.data.map(task =>{
+            if(!task.taskref) return Promise.resolve({data: {data: []}});
+            return axios.get(
+              `${import.meta.env.VITE_API_URL}/assignment/get-assignments/${task.taskref}`)
+          });
+          const assignmentsResponses = await Promise.all(assignmentsPromises);
+          const allAssignments = [].concat(...assignmentsResponses.map(res => res.data.data));
+
+          const assignmentsWithUserDetails = await Promise.all(
+              allAssignments.map(async (assignment) => {
+                  if(!assignment.userref) return { ...assignment, user: null };
+                  const userRes = await axios.get(`${import.meta.env.VITE_API_URL}/user/${assignment.userref}`);
+                  return { ...assignment, user: userRes.data.data };
+              })
+          );
+          
+          return {
+              project: projectRes.data.data,
+              tasks: tasksRes.data.data,
+              team: teamWithUserDetails,
+              assignments: assignmentsWithUserDetails
+          };
+        });
+
+        projects.value = await Promise.all(detailedProjectsPromises);
+
+      } catch (err) {
+        console.error('Erreur lors du chargement des projets:', err);
+      }
     };
 
     // Action pour définir le projet courant, sans appel API

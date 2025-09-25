@@ -8,6 +8,16 @@ export const createTeam = async (teamRef, projectRef) => {
   return result.rows[0];
 };
 
+export const getTeamByCollab = async (teamRef) => {
+  const results = await db.query(
+    `SELECT t.* FROM team t
+     JOIN collaborator c ON t.teamref = c.teamref
+     WHERE c.teamref = $1`,
+    [teamRef]
+  );
+  return results.rows[0];
+}
+
 export const getTeamByProjectRef = async (projectRef) => {
   const results = await db.query(
     'SELECT * FROM team WHERE projectRef = $1',

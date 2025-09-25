@@ -88,10 +88,11 @@ export const loginUser = async (req, res) => {
 
 export const signupUser = async (req, res) => {
   const { firstname, lastname, email, password, country, city, privilege } = req.body;
+  const now = new Date();
   let profilePhotoUrl = null;
 
   if (req.file) {
-    profilePhotoUrl = `/uploads/profiles/${req.file.filename}`;
+    profilePhotoUrl = `/src/assets/uploads/profiles/USER_PHOTO-${now}-${req.file.filename}`;
   }
 
   try {
