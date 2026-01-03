@@ -200,7 +200,7 @@ watch(() => route.params.userref, () => {
                         <div class="top">
                             <h2>{{ currentProject.projectname }}</h2>
                             <button @click="isTeamFormOpen = true" class="team-btn">
-                                <img src="../assets/icons/team.png" alt=""> Team
+                                Team
                             </button>
                         </div>
                         <nav class="tabs">
