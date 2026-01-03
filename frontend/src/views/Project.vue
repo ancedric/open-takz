@@ -169,14 +169,12 @@ watch(() => route.params.userref, () => {
                         @click="handleProjectClick(p.projectref)"
                     >
                         <div class="project-icon">
-                            <img src="../assets/icons/folder.png" alt="">
                         </div>
                         <div class="project-info" v-if="open">
                             <h4>{{ p.projectname }}</h4>
                             <p>{{ p.tasks?.length || 0 }} tasks</p>
                         </div>
                         <div class="more" @click.stop="openSubmenu(p.projectref)" v-if="open">
-                            <img src="../assets/icons/more.png" alt="">
                             <div class="submenu" v-if="isSubmenuOpen && selectedProjectId === p.projectref">
                                 <ul>
                                     <li @click="deleteProject(p.projectref)" class="delete">Delete</li>
@@ -289,7 +287,6 @@ watch(() => route.params.userref, () => {
                 </div>
 
                 <div v-else class="empty-state">
-                    <img src="../assets/images/notifs.png" alt="">
                     <p>Select a project to start working or create a new one.</p>
                 </div>
             </div>
