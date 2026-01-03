@@ -154,9 +154,6 @@ watch(() => route.params.userref, () => {
                     <div class="title-ctn" v-if="open">
                         <h3>Projects</h3>
                     </div>
-                    <div class="toggle" @click="open = !open">
-                        <img src="../assets/icons/arrow.png" :class="{ 'rotate': !open }" alt="">
-                    </div>
                 </div>
 
                 <div class="add-project" v-if="open">
