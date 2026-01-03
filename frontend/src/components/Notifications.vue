@@ -28,66 +28,54 @@
   </template>
   
   <script setup>
-  import { ref, onMounted } from 'vue';
-  import axios from 'axios';
-  import { useUserStore } from '../store/index.js';
-  
-  const userStore = useUserStore()
-  const notifications = ref([]);
-  const displayNotif = ref(false)
-  const unread = ref(0);
+import { ref, onMounted } from 'vue';
+import supabase from '../services/supabaseConfig'; // Import Supabase
+import { useUserStore } from '../store/index.js';
 
-  const showNotifs = () => {
-    displayNotif.value = true
+const userStore = useUserStore()
+const notifications = ref([]);
+const displayNotif = ref(false)
+const unread = ref(0);
+
+const getNotifications = async () => {
+  // Récupération via Supabase
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('userref', userStore.user.userref)
+    .order('createdat', { ascending: false });
+
+  if (data) {
+    notifications.value = data;
+    unread.value = data.filter(n => !n.isread).length;
   }
-  const closeNotifs = () => {
-    displayNotif.value = false
+};
+
+const markAsRead = async (notifRef) => {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ isread: true })
+    .eq('notifref', notifRef);
+
+  if (!error) {
+    const notif = notifications.value.find(n => n.notifref === notifRef);
+    if (notif) notif.isread = true;
+    unread.value = notifications.value.filter(n => !n.isread).length;
   }
+};
 
-  const getNotifications = async () => {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL}/notification/user-notifs/${userStore.user.userref}`)
-    if(response.data?.data){
-      notifications.value = response.data.data
-      countNotifs()
-    }
-    console.log("Aucune notifiication")
-    return []
-  };
-
-  const countNotifs = () => {
-    unread.value = notifications.value.filter((notif) => !notif.isread).length;
-  };
-
-  const formatDateTime = (dateTime) => {
-    const date = new Date(dateTime);
-    const today = new Date();
-    const yesterday = new Date(today.setDate(today.getDate() - 1));
-
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
-    } else {
-      return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
-    }
-  };
+onMounted(() => {
+  getNotifications();
   
-  const markAsRead = async (id) => {
-    const notif = notifications.value.find(n => n.notifref === id);
-    if (notif && !notif.isread) {
-      await axios.put(`${import.meta.env.VITE_API_URL}/notification/update-status/${id}`);
-      notif.isread = true;
-      countNotifs();
-    } else {
-      await getNotifications();
-    }
-  };
-  
-  
-  onMounted(() => {
-    getNotifications();
-  });
-  </script>
+  // OPTIONNEL : Temps réel ! Supabase prévient quand une nouvelle notif arrive
+  supabase
+    .channel('custom-all-channel')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
+        getNotifications();
+    })
+    .subscribe();
+});
+</script>
 
   <style scoped>
     .notifications{

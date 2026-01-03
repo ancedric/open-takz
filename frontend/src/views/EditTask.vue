@@ -35,7 +35,6 @@
     import { ref, computed } from 'vue'
     import supabase from '../services/supabaseConfig.js'
     import { useRoute, useRouter } from 'vue-router'
-    import { addTask } from '../services/task.js'
     import { useProfileStore } from '../store/profile'
 
     const route = useRoute()

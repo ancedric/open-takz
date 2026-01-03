@@ -5,11 +5,16 @@ const userStore = useUserStore()
 </script>
 
 <template>
-    <div class="menu-ctn">
-        <ul class="menu-list">
-            <li class="list-item"><router-link :to="`/project/${userStore.user.userref}`" class="link">Projects</router-link></li>
-        </ul>
+  <nav class="sidebar">
+    <div class="module-switcher">
+      <h3>Mon Entreprise</h3>
     </div>
+    <ul class="nav-links">
+      <li><router-link to="/app/projects">📁 Projets</router-link></li>
+      <li><router-link to="/app/hr">👥 Ressources Humaines</router-link></li>
+      <li><router-link to="/app/finance">💰 Finance</router-link></li>
+    </ul>
+  </nav>
 </template>
 
 <style scoped>

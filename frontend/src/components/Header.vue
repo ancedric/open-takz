@@ -1,75 +1,62 @@
 <template>
-                <div class="header-ctn">
-                        <div class="title">
-                            <h1 @click="home">OpenTaskz</h1>
-                        </div>
-                        <div class="notifs">
-                            <Notifications />
-                            <div v-if="!isLoading" class="profile">
-                                <div class="prof-img" @click="isAccountOpen = !isAccountOpen">
-                                    <img :src="data.profileImage" :alt="data.firstName">
-                                </div>
-                                <div class="username">
-                                    <p>{{data.firstName}} {{data.lastName}}</p>
-                                </div>
-                                <div class="account" v-show="isAccountOpen">
-                                    <ul>
-                                        <li class="user">{{data.firstName}} {{data.lastName}}</li>
-                                        <li><router-link to="/profile" class="link">My Account</router-link></li>
-                                        <li><router-link to="/usersConditions" class="link">GCU</router-link></li>
-                                        <li><router-link to="/legalNotice" class="link">Legal notice</router-link></li>
-                                        <li><router-link to="/support" class="link">Support</router-link></li>
-                                        <li @click="logout">Log Out</li>
-                                    </ul>
-                                </div>
-                            </div>
-                            <div v-else class="profile">
-                                <Spinner/>
-                            </div>
-                        </div>
-                    </div>
+    <div class="header-ctn">
+        <div class="title">
+            <h1 @click="home">OpenTaskz</h1>
+        </div>
+        <div class="notifs">
+            <Notifications />
+            
+            <div v-if="!userStore.isLoading && userStore.user" class="profile">
+                <div class="prof-img" @click="isAccountOpen = !isAccountOpen">
+                    <img :src="userStore.user.profilephotourl || '/Default-avatar.png'" :alt="userStore.user.firstname">
+                </div>
+                <div class="username">
+                    <p>{{ userStore.user.firstname }} {{ userStore.user.lastname }}</p>
+                </div>
+                
+                <div class="account" v-show="isAccountOpen">
+                    <ul>
+                        <li class="user">{{ userStore.user.firstname }} {{ userStore.user.lastname }}</li>
+                        <li><router-link to="/profile" class="link">My Account</router-link></li>
+                        <li><router-link to="/usersConditions" class="link">GCU</router-link></li>
+                        <li><router-link to="/legalNotice" class="link">Legal notice</router-link></li>
+                        <li><router-link to="/support" class="link">Support</router-link></li>
+                        <li @click="handleLogout">Log Out</li>
+                    </ul>
+                </div>
+            </div>
+            <div v-else class="profile">
+                <Spinner/>
+            </div>
+        </div>
+    </div>
 </template>
 
 <script setup>
-    import Spinner from './Spinner.vue'
-    import Notifications from './Notifications.vue'
-    import axios from 'axios'
-    import { useRouter } from 'vue-router'
-    import { ref, toRaw } from 'vue'
-    import { useUserStore } from '../store/index'
+import Spinner from './Spinner.vue'
+import Notifications from './Notifications.vue'
+import { useRouter } from 'vue-router'
+import { ref } from 'vue'
+import { useUserStore } from '../store/index'
 
-    const userStore = useUserStore()
-    const router = useRouter()
-    const isLoading = ref(true)
-    const isAccountOpen = ref(false)
+const userStore = useUserStore()
+const router = useRouter()
+const isAccountOpen = ref(false)
 
-    // Données calculées pour le profil
-    const profileData = () => {
-        if (!userStore.user) {
-            isLoading.value = true
-            return null
-        }
-        isLoading.value = false
-        return {
-            firstName: toRaw(userStore.user.firstname),
-            lastName: toRaw(userStore.user.lastname),
-            profileImage: toRaw(userStore.user.profilePhotoUrl) || '/src/assets/uploads/profiles/Default-avatar.png',
-            email: toRaw(userStore.user.email),
-            plan: toRaw(userStore.user.privilege) || 'user' // Exemple de champ supplémentaire
-        }
+const home = () => {
+    // Redirection vers le dashboard utilisateur
+    router.push(`/project/${userStore.user.userref}`)
+}
+
+const handleLogout = async () => {
+    try {
+        // Utilise la nouvelle méthode de déconnexion de useUserStore (qui appelle supabase.auth.signOut)
+        await userStore.logout()
+        router.push('/auth')
+    } catch (error) {
+        console.error('Erreur lors de la déconnexion:', error.message)
     }
-    const home = () => {
-        router.push(`/project/${userStore.user.userref}`)
-    }
-    const logout = async (userRef) => {
-        const result = await axios.post(`${import.meta.dotenv.VITE_API_URL}/user/logout/${userRef}`)
-        if(result.data?.message === 'Déconnexion réussie'){
-            userStore.logout()
-            router.push('/auth')
-        }
-    }
-    const data = profileData()
-    console.log("Données: ", data)
+}
 </script>
 
 <style scoped>

@@ -1,45 +1,26 @@
-// store/profile.js
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import axios from 'axios'
+import { ref, computed } from 'vue'
 import { useUserStore } from './index' 
 
 export const useProfileStore = defineStore('profile', () => {
-  const profile = ref(null)
-  const isLoading = ref(true)
-
-  const init = async () => {
-    const userStore = useUserStore()
+  const userStore = useUserStore()
+  
+  // Utilisation de computed pour que le profil soit toujours à jour avec le userStore
+  const profile = computed(() => {
+    if (!userStore.user) return null;
     
-    // N'essayez de charger le profil que si l'utilisateur est authentifié
-    if (!userStore.isAuthenticated) {
-      isLoading.value = false
-      return
+    return {
+      email: userStore.user.email,
+      firstName: userStore.user.firstname,
+      lastName: userStore.user.lastname,
+      profileImage: userStore.user.profilephotourl,
+      id: userStore.user.userref,
+      privilege: userStore.user.privilege
     }
+  })
 
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/user`)
-        
-      if (response.data?.valid) {
-        profile.value = {
-          email: response.data.user.email,
-          firstName: response.data.user.firstname,
-          lastName: response.data.user.lastname,
-          profileImage: response.data.user.profilePhotoUrl,
-          id: response.data.user.userRef
-        }
-        console.log('Profil chargé:', profile.value)
-      }
-    } catch (error) {
-      console.error('Erreur initialisation profil:', error)
-      // Si le token est invalide, déconnectez l'utilisateur
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        userStore.logout()
-      }
-    } finally {
-      isLoading.value = false
-    }
-  }
+  const isLoading = computed(() => userStore.isLoading)
 
-  return { profile, isLoading, init }
+  // Plus besoin de init() complexe ici, tout passe par le UserStore
+  return { profile, isLoading }
 })

@@ -100,10 +100,12 @@
 
     const onFileSelected = async (event) => {
         const file = event.target.files[0]
+        const fileName = file.name
+        const filePath = `profiles/${fileName}`
 
         const { data, error } = await supabase.storage
-        .from('user-profile-images')//nom du bucket dans le storage de supabase
-        .upload(`avatars/$file.name`, file, {
+        .from('opentasks_bucket')//nom du bucket dans le storage de supabase
+        .upload(filePath, file, {
             contentType: file.type,
         })
 
@@ -146,7 +148,7 @@
             const plan = userplan.value
 
             const { data, error } = await supabase
-                .from('Profiles')
+                .from('users')
                 .insert([{firstName, lastName, email, company, country, city, plan, profileImage }])
                 .select()
 

@@ -29,86 +29,71 @@
   <Alert type="success" action="loggedIn" v-if="success"/>
 </template>
   
-  <script setup>
-  import { ref } from 'vue';
-  import axios from 'axios'
-  import { useRouter } from 'vue-router';
-  import { useUserStore } from '../store/index'
-  import { useProfileStore } from '../store/profile'
-  import Alert from '../components/Alert.vue';
-  
-    const userEmail = ref('');
-    const userPassword = ref('');
-    const router = useRouter();
+<script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useUserStore } from '../store/index';
+import supabase from '../services/supabaseConfig'; // Utilisation du client Supabase
+import Alert from '../components/Alert.vue';
 
-    const user = useUserStore()
-    const profile = useProfileStore()
-    const errors = ref( false )
-    const success= ref(false)
-    const notFilled = ref(false)
-    const submitting = ref(false)
-    const showPassword = ref(false)
-    const errorMessage = ref('')
-  
-    const handleSubmit = async () => {
+const userEmail = ref('');
+const userPassword = ref('');
+const router = useRouter();
+const userStore = useUserStore();
+
+const errors = ref(false);
+const success = ref(false);
+const notFilled = ref(false);
+const submitting = ref(false);
+const showPassword = ref(false);
+const errorMessage = ref('');
+
+const handleSubmit = async () => {
     submitting.value = true;
     
+    // 1. Validation des champs
+    if (!userEmail.value || !userPassword.value) {
+        notFilled.value = true;
+        setTimeout(() => notFilled.value = false, 3000);
+        submitting.value = false;
+        return;
+    }
+
     try {
-        // 1. Validation des champs
-        if (!userEmail.value || !userPassword.value) {
-            notFilled.value = true;
-            setTimeout(() => notFilled.value = false, 3000);
-            submitting.value = false;
-            return;
-        }
+        // 2. Authentification avec Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: userEmail.value,
+            password: userPassword.value,
+        });
 
-        // 2. Envoi de la requête de connexion
-        // La suppression de { withCredentials: true } est cruciale pour une approche JWT
-        const response = await axios.post(
-            `${import.meta.env.VITE_API_URL}/user/login`,
-            {
-                email: userEmail.value,
-                password: userPassword.value
-            }
-        );
+        if (authError) throw authError;
 
-        // 3. Extraction et vérification du token et des données utilisateur
-        const { token, user: userData } = response.data;
-        
-        if (token && userData) {
-            // Le serveur a bien renvoyé un token et des données
-            // Appeler la fonction d'authentification du store pour stocker le token
-            user.authenticate(userData, token);
+        // 3. Récupération des données utilisateur étendues (privilège, company, etc.) depuis votre table "user"
+        const { data: userData, error: dbError } = await supabase
+            .from('user')
+            .select('*')
+            .eq('userref', authData.user.id)
+            .single();
+
+        if (dbError) throw dbError;
+
+        if (userData) {
+            // 4. Stockage dans le store Pinia (on utilise le token de session Supabase)
+            const session = authData.session;
+            userStore.authenticate(userData, session.access_token);
             
             success.value = true;
             errors.value = false;
             
-            // 4. Redirection après une connexion réussie
-            router.push('/project/' + userData.userref);
-
-        } else {
-            // Le serveur n'a pas renvoyé les données attendues
-            errors.value = true;
-            errorMessage.value = 'Données de connexion invalides';
+            // 5. Redirection vers le dashboard ou les projets
+            setTimeout(() => {
+                router.push('/home'); // Ou router.push('/project/' + userData.userref)
+            }, 1500);
         }
     } catch (error) {
-        // 5. Gestion des erreurs de la requête
-        if (error.response) {
-            // Erreur du serveur (401, 400, etc.)
-            console.error('Erreur de connexion:', error.response.data.message);
-            errors.value = true;
-            errorMessage.value = error.response.data.message || 'Email ou mot de passe incorrect';
-        } else if (error.request) {
-            // La requête a été faite mais aucune réponse n'a été reçue
-            console.error('Pas de réponse du serveur:', error.request);
-            errors.value = true;
-            errorMessage.value = 'Pas de réponse du serveur';
-        } else {
-            // Erreur lors de la configuration de la requête
-            console.error('Erreur de configuration:', error.message);
-            errors.value = true;
-            errorMessage.value = 'Erreur de configuration';
-        }
+        console.error('Erreur de connexion:', error.message);
+        errors.value = true;
+        errorMessage.value = error.message;
 
         setTimeout(() => {
             errors.value = false;
@@ -118,8 +103,7 @@
         submitting.value = false;
     }
 };
-
-  </script>
+</script>
 
   <style scoped>
     .auth-ctn{
@@ -129,7 +113,8 @@
         align-items: center;
         width: 70vw;
         height: 80vh;
-        padding: 0;
+        margin-left: 50%;
+        transform: translate(-50%, 5%);
         background-color: #eee;
         border-radius: 30px;
         box-shadow: 1px 1px 50px rgba(0, 0, 0, 0.3);

@@ -103,7 +103,7 @@
         const file = event.target.files[0]
 
         const { data, error } = await supabase.storage
-        .from('user-profile-images')//nom du bucket dans le storage de supabase
+        .from('opentasks_bucket')//nom du bucket dans le storage de supabase
         .upload(`avatars/$file.name`, file, {
             contentType: file.type,
         })

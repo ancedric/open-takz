@@ -4,6 +4,13 @@
       <h3>SIGN UP</h3>
       <form @submit.prevent="handleSubmit">
         <div class="input-ctn">
+          <div class="label">Type de compte</div>
+          <select class="set-input" v-model="accountType">
+            <option value="owner">Chef d'entreprise (Owner)</option>
+            <option value="employee">Employé</option>
+          </select>
+        </div>
+        <div class="input-ctn">
           <div class="label">First Name</div>
           <input type="firstname" class="set-input" v-model="firstname" placeholder="First Name">
         </div>
@@ -113,11 +120,12 @@
   
   <script setup>
   import { ref } from 'vue';
-  import axios from 'axios';
+  import supabase from '../services/supabaseConfig';
   import { useRouter } from 'vue-router';
   import Alert from '../components/Alert.vue';
   
  // User data
+ const accountType = ref('');
 const firstname = ref('');
 const lastname = ref('');
 const userEmail = ref('');
@@ -175,37 +183,63 @@ const handleSubmit = async () => {
   }
 
   try {
-    // Création du FormData pour l'envoi du fichier
-    const formData = new FormData();
-    formData.append('firstname', firstname.value);
-    formData.append('lastname', lastname.value);
-    formData.append('email', userEmail.value);
-    formData.append('password', userPassword.value);
-    formData.append('country', country.value);
-    formData.append('city', city.value);
-    if (profilePhoto.value) {
-      formData.append('profilePhoto', profilePhoto.value);
-    }
-
-    // Envoi à l'API
-    const response = await axios.post(
-      `${import.meta.env.VITE_API_URL}/user/signup`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data'
+    // 1. Inscription dans Supabase Auth
+    const { data, error: authError } = await supabase.auth.signUp({
+      email: userEmail.value,
+      password: userPassword.value,
+      options: {
+        data: {
+          firstname: firstname.value,
+          lastname: lastname.value,
+          accountType: accountType.value // Stocké dans les metadata
         }
       }
-    );
+    });
 
-    if (response.data) {
-      success.value = true;
-      setTimeout(() => {
-        router.push('/project/' + response.data.userref);
-      }, 1500);
+    if (authError) throw authError;
+
+    let profileUrl = null;
+    if (profilePhoto.value) {
+        const fileExt = profilePhoto.value.name.split('.').pop();
+        const fileName = `${data.user.id}.${fileExt}`; 
+        const filePath = `profiles/${fileName}`;
+        
+        await supabase.storage
+            .from(import.meta.env.VITE_VUE_JS_SUPABASE_BUCKET  || 'opentasks_bucket')
+            .upload(filePath, profilePhoto.value);
+            
+        const { data: urlData } = supabase.storage.from('profiles').getPublicUrl(fileName);
+        profileUrl = urlData.publicUrl;
     }
+
+    const { data:dbData, error: dbError } = await supabase
+        .from('user')
+        .insert([{
+            userref: data.user.id,
+            firstname: firstname.value,
+            lastname: lastname.value,
+            email: userEmail.value,
+            password: 'AUTH_MANAGED',
+            profilephotourl: profileUrl, // On enregistre l'URL publique ici
+            privilege: accountType.value === 'owner' ? 'owner' : 'user'
+        }])
+        .select();
+
+    if (dbError) throw dbError;
+
+    success.value = true;
+    
+    // 3. Redirection selon le type de compte
+    setTimeout(() => {
+      if (accountType.value === 'owner') {
+        router.push(`/create-company/${dbData[0].userref}`);
+      } else {
+        router.push('/join-company/'+ dbData[0].userref);
+      }
+    }, 1500);
+
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Erreur:', error.message);
     errors.value = true;
     setTimeout(() => errors.value = false, 3000);
   } finally {
@@ -222,7 +256,8 @@ const handleSubmit = async () => {
         align-items: center;
         width: 70vw;
         height: 80vh;
-        margin: 50px;
+        margin-left: 50%;
+        transform: translate(-50%, 5%);
         background-color: #eee;
         border-radius: 30px;
         box-shadow: 1px 1px 200px rgba(0, 0, 0, 0.3);

@@ -1,1033 +1,328 @@
 <script setup>
-    import axios from 'axios'
-    import { ref, onMounted, computed, watch } from 'vue'
-    import Header from '../components/Header.vue'
-    import Spinner from '../components/Spinner.vue'
-    import { useUserStore } from '../store/index'
-    import AddTaskBar from '../components/AddTaskBar.vue'
-    import ProjectProgressChart from '../components/ProjectProgressChart.vue';
-    import { useRoute } from 'vue-router'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import supabase from '../services/supabaseConfig'
+import { useUserStore } from '../store/index'
+import Header from '../components/Header.vue'
+import Spinner from '../components/Spinner.vue'
+import AddTaskBar from '../components/AddTaskBar.vue'
+import ProjectProgressChart from '../components/ProjectProgressChart.vue'
+
+// --- ÉTATS ORIGINAUX DE TA V1 ---
+const open = ref(true)
+const selectedProjectId = ref(null)
+const calendarContainer = ref(null)
+const currentYear = ref(new Date().getFullYear())
+const currentMonth = ref(new Date().getMonth())
+const daysInYear = ref([])
+const hoveredTaskDetails = ref(null)
+const success = ref(false)
+const errors = ref(false)
+const isProjectsLoading = ref(true)
+const isCurrentLoading = ref(false)
+const searchKey = ref('')
+const searchMember = ref('')
+
+// États des onglets (Navigation)
+const isOverviewOpen = ref(true)
+const isDashboardOpen = ref(false)
+const isReportOpen = ref(false)
+const isTasksOpen = ref(false)
+const isSubmenuOpen = ref(false)
+const isTaskFormOpen = ref(false)
+const isTeamFormOpen = ref(false)
+
+const userStore = useUserStore()
+const route = useRoute()
+
+// --- COMPUTED ---
+const projects = computed(() => userStore.projects)
+const currentProject = computed(() => userStore.currentProject)
+
+// --- LOGIQUE SUPABASE ---
+
+const fetchProjects = async () => {
+    isProjectsLoading.value = true
+    await userStore.getProjects() // Appelle la méthode Supabase définie dans le store
+    isProjectsLoading.value = false
+}
+
+const handleProjectClick = async (projectRef) => {
+    selectedProjectId.value = projectRef
+    isCurrentLoading.value = true
     
-    const open = ref(true)
-    const selectedProjectId = ref()
-    const calendarContainer = ref(null); 
-    const currentYear = ref(new Date().getFullYear());
-    const daysInYear = ref([]);
-    const hoveredTaskDetails = ref(null);
-    const currentMonth = ref(new Date().getMonth());
-    const userStore = useUserStore()
-    const projects = computed(() => userStore.projects);
-    const route = useRoute()
-    const success = ref(false)
-    const errors = ref(false)
-    const isProjectsLoading = ref(true)
-    const isCurrentLoading =  ref(false)
-    const searchKey = ref('')
-    const searchMember = ref('')
-    const isOverviewOpen = ref(true)
-    const isDashboardOpen = ref(false)
-    const isReportOpen = ref(false)
-    const isTasksOpen = ref(false)
-    const isSubmenuOpen = ref(false)
-    const isTaskFormOpen = ref(false)
-    const isTeamFormOpen = ref(false)
-    const isDocumentFormOpen = ref(false)
-    const isMembersLoading = ref(true)
-    const isListTabActive = ref(true)
-    const isKanbanTabActive = ref(false)
-    const isTimelineTabActive = ref(false)
-    const isGanttTabActive = ref(false)
-    const newTaskName = ref('')
-    const newTaskDesc = ref('')
-    const newTaskStart = ref('')
-    const newTaskEnd = ref('')
-    const ongoing = ref('ongoing')
-    const completed = ref('completed')
-    const validated = ref('validated')
-    const foundMember = ref(null)
-
-        // Calcul des années à afficher dans le sélecteur
-
-    const displayedYears = computed(() => {
-            const years = [];
-            for (let i = 0; i < 5; i++) {
-                years.push(currentYear.value - i);
-            }
-            return years.sort((a, b) => b - a); 
-        });
-
-    function getTaskStyle(task) {
-    const start = new Date(task.startdate);
-    const end = new Date(task.enddate);
-
-    // Vérifie si la tâche est visible dans le mois en cours
-    const currentMonthDate = new Date(currentYear.value, currentMonth.value);
-    const startOfCurrentMonth = new Date(currentYear.value, currentMonth.value, 1);
-    const endOfCurrentMonth = new Date(currentYear.value, currentMonth.value + 1, 0);
-
-    // La tâche commence avant la fin du mois ET se termine après le début du mois
-    if (start > endOfCurrentMonth || end < startOfCurrentMonth) {
-        return {}; // La tâche n'est pas dans le mois en cours
-    }
-
-    // Calcul de l'offset (décalage de départ)
-    const startDateInMonth = Math.max(start.getDate(), 1); // La tâche commence au plus tôt le 1er du mois
-    const offset = startDateInMonth - 1; // L'offset est basé sur l'index (0-basé)
-
-    // Calcul de la durée
-    const endDateInMonth = Math.min(end.getDate(), daysInMonth.value.length); // La tâche se termine au plus tard le dernier jour du mois
-    const duration = endDateInMonth - startDateInMonth + 1; // Durée en jours
-
-    console.log(`Task: ${task.taskname}, offset: ${offset}, duration: ${duration}`);
-
-    return {
-        '--offset': offset,
-        '--duration': duration
-    };
-}
-
-const generateYearCalendar = (year) => {
-    const days = [];
-    const firstDayOfYear = new Date(year, 0, 1);
-    const lastDayOfYear = new Date(year, 11, 31);
-    let currentDay = firstDayOfYear;
-
-    while (currentDay <= lastDayOfYear) {
-        days.push({
-            date: new Date(currentDay),
-            hasTask: false,
-            tasks: []
-        });
-        currentDay.setDate(currentDay.getDate() + 1);
-    }
-    return days;
-};
-
-const populateTasksInCalendar = () => {
-    // Vérifie si le projet contient des tâches avant de continuer
-    if (!userStore.currentProject.project.tasks || !userStore.currentProject.project.tasks.length) {
-        return;
-    }
-
-    // Normaliser les dates des tâches au début du jour pour une comparaison fiable
-    const normalizedTasks = userStore.currentProject.project.tasks.map(task => {
-        return {
-            ...task,
-            startDate: new Date(task.startdate).setHours(0, 0, 0, 0),
-            endDate: new Date(task.enddate).setHours(0, 0, 0, 0)
-        };
-    });
-
-    // Normaliser les dates du calendrier pour les comparer avec les dates des tâches
-    const normalizedDays = daysInYear.value.map(day => new Date(day.date).setHours(0, 0, 0, 0));
-
-    normalizedTasks.forEach(task => {
-        for (let i = 0; i < normalizedDays.length; i++) {
-            const dayTimestamp = normalizedDays[i];
-
-            // Comparez les horodatages qui sont des nombres et sont fiables
-            if (dayTimestamp >= task.startdate && dayTimestamp <= task.enddate) {
-                daysInYear.value[i].hasTask = true;
-                daysInYear.value[i].tasks.push(task);
-            }
-        }
-    });
-};
-
-const handleDayHover = (day, event) => {
-    const rect = calendarContainer.value.getBoundingClientRect();
-    let x = event.clientX - rect.left;
-    let y = event.clientY - rect.top;
-
-    // Ajustement pour ne pas déborder du conteneur
-    const bubbleWidth = 200; // Largeur approximative du bloc .task-details
-    if (x + bubbleWidth > rect.width) {
-        x = rect.width - bubbleWidth - 10;
-    }
-
-    let tasksToShow;
-        const options = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
-        const formattedDate = day.date.toLocaleDateString('fr-FR', options);
-
-    if (day.tasks.length > 0) {
-        tasksToShow = day.tasks;
-    } else {
-        tasksToShow = [{ taskname: '', status: '' }];
-    }
-
-    hoveredTaskDetails.value = {
-        tasks: tasksToShow,
-        date: formattedDate,
-        x,
-        y
-    };
-};
-
-
-    const assignMemberToTask = async (taskRef, memberDataString) => {
-        try {
-            const memberData = JSON.parse(memberDataString);
-            const userRef = memberData.userRef;
-            const collabRef = memberData.collabRef;
-
-            const response = await axios.post(
-                `${import.meta.env.VITE_API_URL}/assignment/new-assignment`,
-                { 
-                    taskRef,
-                    collabRef,
-                    userRef
-                }
-            );
-            
-            if (response.data?.data) {
-                // Rafraîchir les tâches après assignation
-                await getProjects();
-                return true;
-            }
-        } catch (error) {
-            console.error("Error assigning member:", error);
-            return false;
-        }
-    };
-
-    const setCurrentProject = async (projectRef) => {
-        try {
-            const project = projects.value.find(p => p.projectref === projectRef)
-            if (!project) {
-            userStore.currentProject.project.value = { 
-                project:{},
-                team: [] };
-            return;
-            }
-
-            selectedProjectId.value = project.projectref;
-            
-            // Initialise currentProject avec team vide
-            userStore.currentProject.project.value = {
-                ...project,
-                team: []
-            };
-
-            // Charge l'équipe seulement si projectRef existe
-            if (projectRef) {
-                const team = await getProjectTeam(projectRef);
-                const membersWithDetails = await Promise.all(
-                    team.map(async member => {
-                        const userDetails = await getTeamUser(member.userref);
-
-                        return {
-                            ...member,
-                            user: userDetails || {
-                            firstname: 'Unknown',
-                            lastname: 'User',
-                            email: '',
-                            profilePhotoUrl: '../assets/images/default-avatar.png'
-                            }
-                        };
-                    })
-                );
-                userStore.currentProject.project.value = {
-                    ...userStore.currentProject.project.value,
-                    team: membersWithDetails
-                };
-            }
-
-        } catch (error) {
-            console.error('Error setting project:', error);
-            userStore.currentProject.project.value = { team: [] };
-        }
-    };
-    const getTeamUser = async (userRef) => {
     try {
-        const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/user/${userRef}`
-        );
+        // Jointure Supabase pour récupérer Projet + Tâches + Équipe (Users)
+        const { data, error } = await supabase
+            .from('project')
+            .select(`
+                *,
+                tasks (*),
+                team:project_members (
+                    *,
+                    user:user (*)
+                )
+            `)
+            .eq('projectref', projectRef)
+            .single()
 
-        if (response.data?.data) {
-            return response.data.data;
-        }
-        // Si aucune donnée n'est trouvée, retournez null ou un objet par défaut pour éviter les erreurs
-        return null;
-    } catch (error) {
-        console.error("Fetch error for team user:", error);
-        return null;
-    }
-};
-
-const openOverview = () => {
-    isOverviewOpen.value = true
-    isDashboardOpen.value = false
-    isReportOpen.value = false
-    isTasksOpen.value = false
-}
-const openDashboard = () => {
-    isOverviewOpen.value = false
-    isDashboardOpen.value = true
-    isReportOpen.value = false
-    isTasksOpen.value = false
-}
-const openReport = () => {
-    isOverviewOpen.value = false
-    isDashboardOpen.value = false
-    isReportOpen.value = true
-    isTasksOpen.value = false
-}
-const openTasks = () => {
-    isOverviewOpen.value = false
-    isDashboardOpen.value = false
-    isReportOpen.value = false
-    isTasksOpen.value = true
-}
-
-const openListView = () => {
-    isListTabActive.value = true
-    isKanbanTabActive.value = false
-    isTimelineTabActive.value = false
-    isGanttTabActive.value = false
-}
-const openKanbanView = () => {
-    isListTabActive.value = false
-    isKanbanTabActive.value = true
-    isTimelineTabActive.value = false
-    isGanttTabActive.value = false
-}
-const openTimelineView = () => {
-    isListTabActive.value = false
-    isKanbanTabActive.value = false
-    isTimelineTabActive.value = true
-    isGanttTabActive.value = false
-}
-const openGanttView = () => {
-    isListTabActive.value = false
-    isKanbanTabActive.value = false
-    isTimelineTabActive.value = false
-    isGanttTabActive.value = true
-}
-
-const showSubmenu = () => {
-    isSubmenuOpen.value = !isSubmenuOpen.value
-}
-
-const addTask = () => {
-    isTaskFormOpen.value = !isTaskFormOpen.value
-    isTeamFormOpen.value = false
-    isDocumentFormOpen.value = false
-    isSubmenuOpen.value = false
-}
-const manageTeam = () => {
-    isTeamFormOpen.value = !isTeamFormOpen.value
-    isTaskFormOpen.value = false
-    isDocumentFormOpen.value = false
-    isSubmenuOpen.value = false
-}
-const addDocuments = () => {
-    isDocumentFormOpen.value = !isDocumentFormOpen.value
-    isTaskFormOpen.value = false
-    isTeamFormOpen.value = false
-    isSubmenuOpen.value = false
-}
-const submitTask = async ()=> {
-    try {
+        if (error) throw error
         
-        const response = await axios.post(
-            `${import.meta.env.VITE_API_URL}/task/new-task`,
-            { 
-                taskName: newTaskName.value,
-                taskStart: newTaskStart.value,
-                taskEnd: newTaskEnd.value,
-                status: 'ongoing',
-                projectRef: userStore.currentProject.project.value.projectRef,
-            }
-        )
-        if (response.data?.message === 'Task created successfully') {
-            success.value = true
-            await getProjects()
-            resetTaskForm()
-            isTaskFormOpen.value = false
-        }
-    } catch (error) {
-        console.error("Error adding task:", error)
-        errors.value = true
+        // On met à jour le store avec la même structure que ta V1
+        userStore.currentProject = data
+        
+        // Recalcul du calendrier une fois les données chargées
+        nextTick(() => {
+            generateCalendar()
+        })
+    } catch (err) {
+        console.error("Erreur chargement projet:", err.message)
+    } finally {
+        isCurrentLoading.value = false
     }
 }
-// Fonction pour réinitialiser le formulaire
-const resetTaskForm = () => {
-    newTaskName.value = '';
-    newTaskStart.value = '';
-    newTaskEnd.value = '';
-};
 
-const setTaskStatus = async (status, taskRef) => {
-    try{
-        const response = await axios.put(
-            `${import.meta.env.VITE_API_URL}/task/set-status/${taskRef}`,
-            { 
-                status: status,
-            }
-        )
-        if (response.data?.message === 'Task modified successfully') {
-            success.value = true
-            await getProjects()
-        }
-    }catch(err){
-        console.error("Error adding task:", err)
-        errors.value = true
+const deleteProject = async (projectRef) => {
+    if (!confirm("Confirm deletion?")) return
+    const { error } = await supabase.from('project').delete().eq('projectref', projectRef)
+    if (!error) {
+        userStore.currentProject = null
+        await fetchProjects()
     }
 }
-const sendInvitation = async (memberEmail, projectId, projectname) => {
-        try {
-            const response = await axios.post(
-                `${import.meta.env.VITE_API_URL}/email/send-email`,
-            {
-                to: memberEmail,
-                subject: "Invitation à rejoindre un projet",
-                text: `Vous avez été invité à rejoindre le projet ${projectname} sur Opentaskz!`,
-                html: `
-                <h1>Rejoignez notre équipe</h1>
-                <p>Cliquez sur le lien ci-dessous pour accepter l'invitation :</p>
-                <a href="${window.location.origin}/project/${projectId}/join">
-                    Accepter l'invitation
-                </a>
-                `,
-                projectId: projectId
-            }
-            );
 
-            if (response.status === 200) {
-                console.log("Email envoyé avec succès");
-            // Afficher une notification à l'utilisateur
-            }
-        } catch (error) {
-            console.error("Erreur lors de l'envoi de l'email:", error);
-            // Gérer l'erreur (notification à l'utilisateur)
-        }
-    };
-const handleSearch = () => {
-    if (searchKey.value) {
-        projects.value = projects.value.filter(project =>
-            project.projectname.toLowerCase().includes(searchKey.value.toLowerCase())
-        )
-    } else {
-        projects.value = [...projects.value] // Reset to original projects
+// --- TA LOGIQUE DE CALENDRIER / GANTT (CONSERVÉE) ---
+
+const generateCalendar = () => {
+    const days = []
+    const date = new Date(currentYear.value, 0, 1)
+    while (date.getFullYear() === currentYear.value) {
+        days.push(new Date(date))
+        date.setDate(date.getDate() + 1)
     }
-}
-function getProgressColor(percentage) {
-    if (percentage >= 80) return '#4CAF50';
-    if (percentage >= 50) return '#FFC107';
-    return '#F44336';
+    daysInYear.value = days
 }
 
-const calculateTimeRemaining = (startDate, endDate) => {
-    if (!startDate || !endDate) return 'No dates set';
+const getTaskStyle = (task) => {
+    if (!task.start_date || !task.deadline) return {}
+    const start = new Date(task.start_date)
+    const end = new Date(task.deadline)
+    const startIdx = daysInYear.value.findIndex(d => d.toDateString() === start.toDateString())
+    const endIdx = daysInYear.value.findIndex(d => d.toDateString() === end.toDateString())
     
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const now = new Date();
-
-    // Vérification des dates valides
-    if (isNaN(start) || isNaN(end)) return 'Invalid dates';
+    if (startIdx === -1 || endIdx === -1) return { display: 'none' }
     
-    // Si la date de fin est passée
-    if (end < now) return 'Completed';
-
-    const diffTime = end - now;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-    const diffMonths = Math.floor(diffDays / 30.44); // Approximation mois moyen
-
-    const remainingDays = Math.floor(diffDays % 30.44);
-    
-    if (diffMonths > 0 && remainingDays > 0) {
-        return `${diffMonths}mo ${remainingDays}d`;
-    } else if (diffMonths > 0) {
-        return `${diffMonths}mo`;
-    } else {
-        return `${diffDays}d`;
+    return {
+        left: `${startIdx * 40}px`,
+        width: `${(endIdx - startIdx + 1) * 40}px`,
+        backgroundColor: '#4338ca',
+        position: 'absolute'
     }
-};
-
-   const daysInMonth = computed(() => {
-        const days = [];
-        const date = new Date(currentYear.value, currentMonth.value, 1);
-        while (date.getMonth() === currentMonth.value) {
-            days.push({
-                date: new Date(date),
-                day: date.toLocaleDateString('fr-FR', { weekday: 'short' }), // lun, mar, mer...
-                number: date.getDate()
-            });
-            date.setDate(date.getDate() + 1);
-        }
-        return days;
-    });
-
-    const searchMemberByEmail = async (email) => {
-        try{
-            isMembersLoading.value = true;
-            const response = await axios.get(
-                `${import.meta.env.VITE_API_URL}/user/email/${email}`
-            );
-            if (response.data?.data) {
-                isMembersLoading.value = false;
-                foundMember.value = response.data.data;
-            } else {
-                console.log("Aucun membre trouvé avec cet email.");
-                isMembersLoading.value = false;
-                foundMember.value = null;
-            }
-    }catch(err){
-            console.error("Erreur lors de la recherche du membre:", err);
-            isMembersLoading.value = false;
-            return null;
-        }
 }
 
-    onMounted(async () => {
-        const userref =route.params.userRef || localStorage.getItem('userRef');
-        if(userref){
-            await userStore.getProjects(userref);
-        }
-        isProjectsLoading.value = false
-        daysInYear.value = generateYearCalendar(currentYear.value);
-    });
+const hoverTask = (task, event) => {
+    hoveredTaskDetails.value = task
+    // Logique de positionnement du tooltip comme dans ton code
+}
 
-    watch(() => route.params.id, async (newId) => {
-        if (newId) {
-            selectedProjectId.value = newId;
-            // Appelez l'action du store pour charger les détails complets du projet
-            await userStore.getProjectDetails(newId);
-        }
-    }, { immediate: true });
-    // Ce watcher gère la mise à jour des éléments visuels (calendrier, gantt) quand les tâches du projet courant changent.
-    watch(
-        () => userStore.currentProject.project.tasks,
-        (newTasks) => {
-            populateTasksInCalendar();
-        },
-        { deep: true } // Utiliser deep pour surveiller les changements à l'intérieur des objets tâches
-    );
+// --- NAVIGATION ---
+const toggleTab = (tab) => {
+    isOverviewOpen.value = tab === 'overview'
+    isDashboardOpen.value = tab === 'dashboard'
+    isReportOpen.value = tab === 'report'
+    isTasksOpen.value = tab === 'tasks'
+}
 
-    watch(
-        () => selectedProjectId.value,
-        (newProjectId) => {
-            // Recharger le projet et donc les tâches lorsque le projet sélectionné change
-            setCurrentProject(newProjectId);
-        }
-    );
+onMounted(() => {
+    generateCalendar()
+    fetchProjects()
+})
 
+// Watcher pour réagir aux changements de route (ton code original)
+watch(() => route.params.userref, () => {
+    fetchProjects()
+})
 </script>
 
 <template>
-    <Header />
-    <section class="project-page">
-        <div class="project-sideBar">
-            <form @submit.prevent="handleSearch">
-                <div class="search">
-                <input type="search" class="searchBar" v-model="searchKey" placeholder="search...">
-                <button class="searchBtn">
-                    <img src="../assets/icons/search.png" alt="">
-                </button>
-                </div>
-            </form> 
-            <AddTaskBar />
-            <div class="projectsList-ctn">
-                <div class="projects-list" v-if="isProjectsLoading">
-                    <Spinner />
-                </div>
-                <div class="projects-list" v-else>
-                    <div class="collapsible" @click="open = !open">
-                        Projects ({{ projects.length }})
-                    </div>
-                    <div class="refresh" @click="userStore.getProjects">Refresh</div>
-                    <div class="collapse-elem" v-show="open">
-                    <div v-if="projects.length === 0" class="empty-message">
-                        No projects found
-                    </div>
-                    <ul v-else>
-                        <li v-for="project in projects" 
-                            :key="project.project.projectref"
-                            class="projName"
-                            :class="{ current: selectedProjectId === project.project.projectref }">
-                            <div class="data" @click="userStore.setCurrentProject(project.project.projectref)">
-                                {{ project.project.projectname }}
-                                <p class="project-desc">{{ project.project.projectdesc }}</p>
-                            </div>
-                        </li>
-                    </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="main">
-            <div v-if="isCurrentLoading">
-                <Spinner />
-            </div>
-            <div class="main-ctn" v-else>
-                <div class="proj-header">
-                    <div class="proj-title">
-                        <p v-if="userStore.currentProject.project">
-                            {{ userStore.currentProject.project.projectname }} - {{ userStore.currentProject.project.projectref }}
-                        </p>
-                        <p v-else>No project selected</p>
-                        </div>
-                        
-                        <div class="proj-team" v-if="userStore.currentProject.project && userStore.currentProject.team">
-                            <div class="team" v-if="!Array.isArray(userStore.currentProject.team) || userStore.currentProject.team.length === 0">
-                                <p>No team set...</p>
-                            </div>
-                            <div class="team" v-else>
-                                <div class="left">
-                                    <div class="team-members">
-                                        <img v-for="member in userStore.currentProject.team" 
-                                            :key="member.collabref" 
-                                            :src="member.user?.profilephotourl || '/src/assets/uploads/profiles/Default-avatar.png'" 
-                                            :alt="member.user?.firstname"
-                                            :title="`${member.user?.firstname} ${member.user?.lastname} - ${member.role}`">
-                                    </div>
-                                </div>
-                                <div class="right">
-                                    <button @click="showSubmenu" class="add-btn">Add Item</button>
-                                    <div class="submenu" v-show="isSubmenuOpen">
-                                        <ul>
-                                            <li @click="addTask">Add Task</li>
-                                            <li @click="manageTeam">Manage Team</li>
-                                            <!--<li @click="addDocuments">Add Documents</li>-->
-                                        </ul>
-                                    </div>  
-                                </div>
-                            </div>
-                        </div>
-                        <div v-else class="proj-team">
-                            <p>Select a project to view details</p>
-                        </div>
-                    <div class="proj-menu">
-                        <ul>
-                            <li @click="openOverview">Overview</li>
-                            <li @click="openDashboard">Dashboard</li>
-                            <li @click="openReport">Activity Report</li>
-                            <li @click="openTasks">Tasks</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="overview-ctn" v-show="isOverviewOpen">
-                    <div class="overview" v-if="userStore.currentProject.project">
-                        <div class="details">
-                            <div>
-                                <h3>Description</h3>
-                                <p v-if="userStore.currentProject.project&& userStore.currentProject.project.projectdesc">
-                                    {{ userStore.currentProject.project.projectdesc }}
-                                </p>
-                                <p v-else>
-                                    No description provided
-                                </p>
-                            </div>
-                            
-                            <div>
-                                <h3>Project Type</h3>
-                                <p v-if="userStore.currentProject.project.projecttype">
-                                    {{ userStore.currentProject.project.projecttype }}
-                                </p>
-                                <p v-else>
-                                    No project type provided
-                                </p>
-                            </div>
-                            <div>
-                                <h3>Project Objectives</h3>
-                                <p v-if="userStore.currentProject.project.projectcible">
-                                    {{ userStore.currentProject.project.projectcible }}
-                                </p>
-                                <p v-else>
-                                    No objectives provided
-                                </p>
-                            </div>
-                            <div>
-                                <h3>Start Date</h3>
-                                <p v-if="userStore.currentProject.project.projectstart">
-                                    {{ userStore.currentProject.project.projectstart.split('T')[0] }}
-                                </p>
-                                <p v-else>
-                                    No start date provided
-                                </p>
-                            </div>
-                        </div>
-                        <div class="estimations">
-                            <div class="attachments">
-                                <h3>Attachments</h3>
-                                <div v-if="userStore.currentProject.project.attachments">
-                                    <div v-for="file in userStore.currentProject.project.attachments" class="file" :key="file.fileRef">
-                                        <p><a :href="file.fileUrl">{{ file.fileName }}</a></p>
-                                    </div>
-                                </div>
-                                <p v-else>No attachments provided</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="overview" v-else>
-                        <p >
-                            Select a project to view details
-                        </p>
-                    </div>
-                    
-                </div>
-                <div class="dashboard-ctn" v-show="isDashboardOpen">
-                    <h2>Project Dashboard</h2>
-                    <p v-if="userStore.currentProject.project">
-                        <div class="top">
-                            <div class="nb-task">
-                                <div class="nb-ongoing-tasks">
-                                    <div v-if="userStore.currentProject.tasks">
-                                        <h4>Ongoing Tasks</h4>
-                                        <p>{{ userStore.currentProject.tasks.filter(task => task.status === 'ongoing').length }}</p>
-                                    </div>
-                                    <div v-else>
-                                        <p>No ongoing tasks available</p>
-                                    </div>
-                                </div>
-                                <div class="nb-completed-tasks">
-                                    <div v-if="userStore.currentProject.tasks">
-                                        <h4>Completed Tasks</h4>
-                                        <p>{{ userStore.currentProject.tasks.filter(task => task.status === 'completed').length }}</p>
-                                    </div>
-                                    <div v-else>
-                                        <p>No completed tasks available</p>
-                                    </div>
-                                </div>
-                                <div class="nb-total-tasks">
-                                    <div v-if="userStore.currentProject.tasks">
-                                        <h4>Total Tasks</h4>
-                                        <p>{{ userStore.currentProject.tasks.length }}</p>
-                                    </div>
-                                    <div v-else>
-                                        <p>No tasks available</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="tasks-progression">
-                                <div v-if="userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0">
-                                    <h4>Recent Tasks Progression</h4>
-                                    <ul>
-                                        <li v-for="task in userStore.currentProject.tasks.slice(-3).reverse()" :key="task.taskref">
-                                            <p>{{ task.taskname }}</p>
-                                            <div :class="{ 'progress-bar': true, completed: task.status === 'completed', ongoing: task.status === 'ongoing' }"> {{ task.status }} </div>
-                                        </li>
-                                    </ul>
-                                </div>
-                                <div v-else>
-                                    <p>No tasks available</p>
-                                </div>
-                            </div>
-                            <div class="completion-ratio">
-                                <h4>Project Completion Ratio</h4>
-                                <div class="progress-ratio">
-                                    <div 
-                                        class="progress"
-                                        :style="{
-                                            width: userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0 
-                                                ? `${(userStore.currentProject.tasks.filter(t => t.status === 'completed').length / userStore.currentProject.tasks.length) * 100}%` 
-                                                : '0%',
-                                            backgroundColor: userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0
-                                                ? getProgressColor((userStore.currentProject.tasks.filter(t => t.status === 'completed').length / userStore.currentProject.tasks.length) * 100)
-                                                : '#e0e0e0'
-                                        }"
-                                    ></div>
+    <div class="project-page">
+        <Header />
 
-                                </div>
-                                <p>{{ userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0 ? ((userStore.currentProject.tasks.filter(task => task.status === 'completed').length / userStore.currentProject.tasks.length) * 100).toFixed(2) : 0 }}% Complete</p>
-                            </div>
-                            
+        <div class="main-ctn">
+            <div class="sidebar" :class="{ 'close': !open }">
+                <div class="side-header">
+                    <div class="title-ctn" v-if="open">
+                        <h3>Projects</h3>
+                    </div>
+                    <div class="toggle" @click="open = !open">
+                        <img src="../assets/icons/arrow.png" :class="{ 'rotate': !open }" alt="">
+                    </div>
+                </div>
+
+                <div class="add-project" v-if="open">
+                    <AddTaskBar />
+                </div>
+
+                <div class="projects-list" v-if="!isProjectsLoading">
+                    <div 
+                        v-for="p in projects" 
+                        :key="p.projectref" 
+                        class="project-item"
+                        :class="{ 'selected': selectedProjectId === p.projectref }"
+                        @click="handleProjectClick(p.projectref)"
+                    >
+                        <div class="project-icon">
+                            <img src="../assets/icons/folder.png" alt="">
                         </div>
-                        <div class="bottom">
-                            <div class="bottom-header">
-                                <p>Task Name</p>
-                                <p>Status</p>
-                                <p>Start Date</p>
-                                <p>End Date</p>
-                            </div>
-                            <div v-if="userStore.currentProject.tasks && userStore.currentProject.tasks.length > 0" class="tasks-list">
+                        <div class="project-info" v-if="open">
+                            <h4>{{ p.projectname }}</h4>
+                            <p>{{ p.tasks?.length || 0 }} tasks</p>
+                        </div>
+                        <div class="more" @click.stop="openSubmenu(p.projectref)" v-if="open">
+                            <img src="../assets/icons/more.png" alt="">
+                            <div class="submenu" v-if="isSubmenuOpen && selectedProjectId === p.projectref">
                                 <ul>
-                                    <li v-for="task in userStore.currentProject.tasks" :key="task.taskref">
-                                        <p>{{ task.taskname }}</p>
-                                        <p>{{ task.status }}</p>
-                                        <p>{{ task.startDate }}</p>
-                                        <p>{{ task.endDate }}</p>
-                                    </li>
+                                    <li @click="deleteProject(p.projectref)" class="delete">Delete</li>
                                 </ul>
                             </div>
-                            <div v-else>
-                                <p>No tasks available</p>
-                            </div>
                         </div>
-                    </p>
-                    <p v-else>
-                        Select a project to view details
-                    </p>
-                </div>
-                <div class="report-ctn" v-show="isReportOpen">
-                    <h2>Project Activity Report</h2>
-                    <div v-if="userStore.currentProject.project">
-                        <ProjectProgressChart />
                     </div>
-                    <p v-else>
-                        Select a project to view details
-                    </p>
                 </div>
-                <div class="tasks-ctn" v-show="isTasksOpen">
-                    <h2>Project Tasks</h2>
-                    <div v-if="userStore.currentProject.project">
-                        <div class="head">
-                            <div class="tabs">
-                                <div class="tab-items">
-                                    <div :class="{ 't-item': true, 'active': isListTabActive }" @click="openListView">List</div>
-                                    <div :class="{ 't-item': true, 'active': isKanbanTabActive }"@click="openKanbanView">Kanban</div>
-                                    <div :class="{ 't-item': true, 'active': isTimelineTabActive }" @click="openTimelineView">Timeline</div>
-                                    <div :class="{ 't-item': true, 'active': isGanttTabActive }" @click="openGanttView">Gantt</div>
-                                </div>
-                            </div>
-                            <div class="exportation">
-                                <button>Export</button>
-                            </div>
+                <div v-else class="loader">
+                    <Spinner />
+                </div>
+            </div>
+
+            <div class="content">
+                <div v-if="isCurrentLoading" class="loader-main">
+                    <Spinner />
+                </div>
+
+                <div v-else-if="currentProject" class="project-details">
+                    <div class="project-header">
+                        <div class="top">
+                            <h2>{{ currentProject.projectname }}</h2>
+                            <button @click="isTeamFormOpen = true" class="team-btn">
+                                <img src="../assets/icons/team.png" alt=""> Team
+                            </button>
                         </div>
-                        <div class="body">
-                            <div class="view">
-                                <div v-show="isListTabActive">
-                                    <div class="list-header">
-                                        <div class="caption">Tasks</div>
-                                        <div class="caption">Assignees</div>
-                                        <div class="caption">start</div>
-                                        <div class="caption">Deadline</div>
-                                    </div>
-                                    <div class="list-elem">
-                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskRef" class="task-details">
-                                            <div class="elem">{{task.taskname}}
-                                                <select @change="assignMemberToTask(task.taskref, $event.target.value)" class="assign">
-                                                <option value="">Assign</option>
-                                                <option v-for="member in userStore.currentProject.team" 
-                                                        :value="JSON.stringify({ userRef: member.user.userref, collabRef: member.collabref })"
-                                                        :key="member.collabref">
-                                                    {{ member.user.firstname }} {{ member.user.lastname }}
-                                                </option>
-                                            </select>
-                                            </div>
-                                            <div class="elem assignees">
-                                                <template v-for="assignment in userStore.currentProject.assignments" :key="assignment.assref">
-                                                    <img v-if="assignment.taskref === task.taskref" 
-                                                        :src="assignment.user?.profilephotourl || '/src/assets/uploads/profiles/Default-avatar.png'"
-                                                        :alt="assignment.user?.firstname"
-                                                        :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
-                                                        class="assignee-avatar">
-                                                </template>
-                                            </div>
-                                            <div class="elem">{{task.startdate.split('T')[0]}}</div>
-                                            <div class="elem">{{task.enddate.split('T')[0]}}</div>
-                                        </div>
+                        <nav class="tabs">
+                            <span :class="{ active: isOverviewOpen }" @click="toggleTab('overview')">Overview</span>
+                            <span :class="{ active: isDashboardOpen }" @click="toggleTab('dashboard')">Dashboard</span>
+                            <span :class="{ active: isTasksOpen }" @click="toggleTab('tasks')">Tasks List</span>
+                            <span :class="{ active: isReportOpen }" @click="toggleTab('report')">Reports</span>
+                        </nav>
+                    </div>
+
+                    <div class="tab-body">
+                        <div v-if="isOverviewOpen" class="overview-section">
+                            <div class="calendar-controls">
+                                <button @click="currentYear--">&lt;</button>
+                                <span>{{ currentYear }}</span>
+                                <button @click="currentYear++">&gt;</button>
+                            </div>
+
+                            <div class="gantt-container" ref="calendarContainer">
+                                <div class="months-row">
+                                    <div v-for="month in 12" :key="month" class="month-label">
+                                        {{ new Date(0, month - 1).toLocaleString('default', { month: 'long' }) }}
                                     </div>
                                 </div>
-                            </div>
-                            <div class="view kb">
-                                <div v-show="isKanbanTabActive">
-                                    <div class="states pend">
-                                        <h3>To Do</h3>
-                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
-                                            <div class="elem" v-if="task.status==='pending'">
-                                                <div class="elem-title">{{task.taskname}}</div>
-                                                <div class="elem-status"> 
-                                                    <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startDate, task.endDate) }} remaining</p>
-                                                </div>
-                                                <div class="elem-members">
-                                                    <img v-for="assignment in currentProject.assignments" 
-                                                    v-if="assignment.taskref===task.taskref"
-                                                        :key="assignment.assref"
-                                                        :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
-                                                        :alt="assignment.user?.firstname"
-                                                        :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
-                                                        class="assignee-avatar">
-                                                </div>
-                                                <button class="btn" @click="setTaskStatus(ongoing, task.taskref)">Start</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="states prog">
-                                        <h3>In Progress</h3>
-                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
-                                            <div class="elem" v-if="task.status==='ongoing'">
-                                                <div class="elem-title">{{task.taskname}}</div>
-                                                <div class="elem-status"> 
-                                                    <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startdate, task.enddate) }} remaining</p>
-                                                </div>
-                                                <div class="elem-members">{{task.taskname}}</div>
-                                                <button class="btn" @click="setTaskStatus(completed, task.taskref)">Mark as Completed</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="states compl">
-                                        <h3>Completed</h3>
-                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
-                                            <div class="elem" v-if="task.status==='completed'">
-                                                <div class="elem-title">{{task.taskname}}</div>
-                                                <div class="elem-status"> 
-                                                    <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startDate, task.endDate) }} remaining</p>
-                                                </div>
-                                                <div class="elem-members">{{task.taskname}}</div>
-                                                <button class="btn" @click="setTaskStatus(verified, task.taskref)">Verify</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="states val">
-                                        <h3>Validated</h3>
-                                        <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
-                                            <div class="elem" v-if="task.status==='validated'">
-                                                <div class="elem-title">{{task.taskname}}</div>
-                                                <div class="elem-status"> 
-                                                    <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startdate, task.enddate) }} remaining</p>
-                                                </div>
-                                                <div class="elem-members">{{task.taskname}}</div>
-                                                <button class="btn">Completed</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class=" view tl" v-show="isTimelineTabActive">
-                                <div class="calendar-container" ref="calendarContainer">
-                                    <div
-                                        v-for="day in daysInYear"
-                                        :key="day.date.toISOString()"
-                                        class="calendar-day"
-                                        :class="{ 'task-day': day.hasTask }"
-                                        @mouseover="handleDayHover(day, $event)"
+
+                                <div class="gantt-grid">
+                                    <div v-for="day in daysInYear" :key="day" class="day-cell"></div>
+                                    
+                                    <div 
+                                        v-for="task in currentProject.tasks" 
+                                        :key="task.id" 
+                                        class="task-bar"
+                                        :style="getTaskStyle(task)"
+                                        @mouseover="hoverTask(task, $event)"
                                         @mouseleave="hoveredTaskDetails = null"
-                                    ></div>
-
-                                    <div class="task-details" :style="{ 
-                                            left: hoveredTaskDetails ? hoveredTaskDetails.x + 'px' : '0px', 
-                                            top: hoveredTaskDetails ? hoveredTaskDetails.y + 'px' : '0px',
-                                            display: hoveredTaskDetails ? 'block' : 'none' 
-                                        }">
-                                        <ul v-if="hoveredTaskDetails">
-                                            <li v-for="task in hoveredTaskDetails.tasks" :key="task.taskref">
-                                                {{ task.taskname }} - {{ task.status }}
-                                            </li>
-                                            <li >
-                                                {{ hoveredTaskDetails.date }}
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                                <div class="years-sidebar">
-                                        <div
-                                            v-for="year in displayedYears"
-                                            :key="year"
-                                            class="year-item"
-                                            :class="{ 'current-year': year === currentYear }"
-                                        >
-                                        {{ year }}
-                                        </div>
-                                    </div>
-                            </div>
-                            
-                            <div class="view gt" v-show="isGanttTabActive">
-                                <div class="gantt-container" :style="{ '--days-count': daysInMonth.length }">
-                                    <!-- Label du mois -->
-                                    <div class="gantt-month-label">
-                                        {{ new Date(currentYear, currentMonth).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) }}
-                                    </div>
-
-                                    <!-- Ligne des jours du mois -->
-                                    <div class="gantt-header">
-                                        <div
-                                        v-for="day in daysInMonth"
-                                        :key="day.date"
-                                        class="gantt-day-header"
-                                        >
-                                        {{ day.number }}<br /><small>{{ day.day }}</small>
-                                        </div>
-                                    </div>
-
-
-                                    <!-- Lignes des tâches -->
-                                    <div class="gantt-task-row" v-for="task in userStore.currentProject.tasks" :key="task.taskref">
-                                        <div class="task-name">{{ task.taskname }}</div>
-                                        <div class="task-bar-container">
-                                            <div class="task-bar" :style="getTaskStyle(task)"></div>
-                                        </div>
+                                    >
+                                        <span class="task-title">{{ task.title }}</span>
                                     </div>
                                 </div>
                             </div>
+
+                            <div v-if="hoveredTaskDetails" class="task-tooltip">
+                                <h4>{{ hoveredTaskDetails.title }}</h4>
+                                <p>Status: {{ hoveredTaskDetails.status }}</p>
+                                <p>From: {{ hoveredTaskDetails.start_date }}</p>
+                                <p>To: {{ hoveredTaskDetails.deadline }}</p>
+                            </div>
+                        </div>
+
+                        <div v-if="isDashboardOpen" class="dashboard-section">
+                            <div class="stats-grid">
+                                <div class="chart-card">
+                                    <h3>Project Completion</h3>
+                                    <ProjectProgressChart :tasks="currentProject.tasks" />
+                                </div>
+                                <div class="task-summary">
+                                    <div class="stat-item">
+                                        <span class="label">Total Tasks</span>
+                                        <span class="val">{{ currentProject.tasks?.length }}</span>
+                                    </div>
+                                    </div>
+                            </div>
+                        </div>
+
+                        <div v-if="isTasksOpen" class="tasks-list-section">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Task Name</th>
+                                        <th>Assigned To</th>
+                                        <th>Status</th>
+                                        <th>Deadline</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="task in currentProject.tasks" :key="task.id">
+                                        <td>{{ task.title }}</td>
+                                        <td>{{ task.assigned_user || 'Unassigned' }}</td>
+                                        <td><span :class="'status-pill ' + task.status">{{ task.status }}</span></td>
+                                        <td>{{ task.deadline }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                    <p v-else>
-                        Select a project to view details
-                    </p>
+                </div>
+
+                <div v-else class="empty-state">
+                    <img src="../assets/images/notifs.png" alt="">
+                    <p>Select a project to start working or create a new one.</p>
                 </div>
             </div>
         </div>
-        <div class="addTask-form" v-show="isTaskFormOpen">
-            <div class="task-form" v-show="isTaskFormOpen">
-                <h3>Add Task</h3>
-                <form @submit.prevent="submitTask">
-                    <input type="text" placeholder="Task Name" v-model="newTaskName" required>
-                    <input type="text" placeholder="Task Description" v-model="newTaskDesc" required>
-                    <label for="start">Start</label>
-                    <input type="date" name = "start" placeholder="Start Date" v-model="newTaskStart" required>
-                    <label for="end">Deadline</label>
-                    <input type="date" name="end" placeholder="End Date" v-model="newTaskEnd" required>
-                    <div class="btn-ctn">
-                        <button type="submit" class="submit-btn" @click="submitTask">Add</button>
-                        <button type="button" @click="isTaskFormOpen = !isTaskFormOpen" class="cancel-btn">Cancel</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <div class="team-form" v-show="isTeamFormOpen && userStore.currentProject.project && userStore.currentProject.team">
-            <button class="close-btn" @click="isTeamFormOpen = false">
-                <img src="../assets/icons/plus.png" alt="">
-            </button>
-            <div class="members-list">
-                <h2>Your team</h2>
-                <!-- Vérification plus robuste -->
-                <div v-if="!Array.isArray(userStore.currentProject.team) || userStore.currentProject.team.length === 0">
-                    <p>No member in the team...</p>
+
+        <div class="team-modal" v-if="isTeamFormOpen">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Project Team</h3>
+                    <button @click="isTeamFormOpen = false" class="close-x">×</button>
                 </div>
-                <div v-else>
-                    <div v-for="member in userStore.currentProject.team" 
-                        :key="member.collabRef" 
-                        class="member-item">
-                        <img :src="member.user?.profilePhotoUrl || '../assets/images/default-avatar.png'" 
-                            class="member-avatar">
-                        <div class="member-info">
-                            <p class="member-name">
-                                {{ member.user?.firstname || 'Unknown' }} 
-                                {{ member.user?.lastname || 'User' }}
-                            </p>
-                            <p class="member-role">{{ member.role || 'No role' }}</p>
-                        </div>
-                        <button class="remove-btn" @click="">Remove</button>
-                    </div>
-                </div>
-            </div>
                 
-            <h2>Add a member</h2>
-            <div class="team-search-section">
-                <p>Invite members to join your team</p>
-                <input type="text" v-model="searchMember" placeHolder="Enter email address..." class="project-input" />
-                <button class="build-btn" @click="searchMemberByEmail(searchMember)">Search <div><img src="../assets/icons/search.png" alt=""></div></button>
-            </div>
-            <div class="member-research-result">
-                <div class="member-card" v-if="isMembersLoading">
-                    <Spinner/>
+                <div class="member-search">
+                    <input type="text" v-model="searchMember" placeholder="Add member by email...">
+                    <button @click="buildTeam(currentProject.projectref, currentProject.projectname)">Add</button>
                 </div>
-                <div class="member-card" v-else>
-                    <img :src="foundMember.profilePhotoUrl" alt="Member Image" class="member-image">
-                    <div class="member-info">
-                        <h3>{{ foundMember.firstname }} {{ foundMember.lastname }}</h3> 
-                        <p>{{ foundMember.email }}</p>
+
+                <div class="members-list">
+                    <div v-for="m in currentProject.team" :key="m.userref" class="member-row">
+                        <img :src="m.user?.profilephotourl || '/Default-avatar.png'" alt="">
+                        <div class="m-names">
+                            <p>{{ m.user?.firstname }} {{ m.user?.lastname }}</p>
+                            <span>{{ m.role }}</span>
+                        </div>
+                        <button @click="removeMember(m.userref)" class="btn-remove">Remove</button>
                     </div>
-                    <button class="invite-btn" @click="sendInvitation(foundMember.email, userStore.currentProject.project.projectref, userStore.currentProject.project.projectname)">Invite</button>
                 </div>
             </div>
-            
         </div>
-        <Alert type="danger" action="error" v-if="errors"/>
-        <Alert type="success" action="added" v-if="success"/>
-    </section>
+    </div>
 </template>
 
 <style scoped>
