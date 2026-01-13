@@ -1,10 +1,32 @@
 <script setup>
-import { useUserStore } from '../store/index';
+import { useUserStore } from '../store/index'
+import supabase from '../services/supabaseConfig.js'
 import { useRouter } from 'vue-router';
+import { ref, onMounted, computed } from 'vue';
+import Header from '../components/Header.vue'
 
 const userStore = useUserStore();
 const router = useRouter();
-console.log("user: ", userStore.user);
+const departments = ref([])
+const excludedDepts = ['Ressources humaines', 'Comptabilité', 'Marketing', 'Finances']
+
+onMounted(async () => {
+  // Correction de l'accès au companyref selon ton store
+  const companyRef = userStore.user.company.companyref 
+  console.log(userStore.user.employe)
+  const { data: depts } = await supabase
+    .from('department')
+    .select('*')
+    .eq('companyref', companyRef)
+    
+  departments.value = depts || []
+})
+
+// 2. Création de la liste filtrée
+const dynamicDepartments = computed(() => {
+  return departments.value.filter(d => !excludedDepts.includes(d.deptname))
+})
+
 const logout = () => {
   // Logique de déconnexion ici
   router.push('/auth');
@@ -21,34 +43,30 @@ const logout = () => {
       <nav class="sidebar-nav">
         <div class="nav-section">
           <p class="section-title">Général</p>
-          <router-link to="/home" class="nav-item">🏠 Tableau de Bord</router-link>
+          <router-link to="/home" class="nav-item" v-if="userStore.user.employe.privilege !=='user'">🏠 Tableau de Bord</router-link>
+          <router-link to="/home/employe" class="nav-item">Portail employe</router-link>
         </div>
 
-        <div class="nav-section">
+        <div class="nav-section" v-if="userStore.user.employe.privilege !=='user'">
           <p class="section-title">Départements</p>
-          <router-link :to="`/project/${userStore.user.userref}`" class="nav-item">
-            📁 Projets (V1)
-          </router-link>
-          
-          <router-link to="/hr" class="nav-item">👥 Ressources Humaines</router-link>
-          <router-link to="/finance" class="nav-item">💰 Finance & Facturation</router-link>
+          <router-link to="/home/hr" class="nav-item">👥 Ressources Humaines</router-link>
+          <router-link to="/home/accounting" class="nav-item">👥 Comptabilité</router-link>
+          <router-link to="/home/crm" class="nav-item">💰 Marketing</router-link>
+          <router-link to="/home/finance" class="nav-item">💰 Finance & Facturation</router-link>
+          <router-link v-for="d in dynamicDepartments" :key="d.deptref" :to="`/home/${d.deptname}/${d.deptref}`" class="nav-item"> {{d.deptname}} </router-link>
         </div>
 
         <div class="nav-section settings">
-          <router-link to="/profile" class="nav-item">👤 Mon Profil</router-link>
+          <p class="section-title">Compte</p>
+          <router-link to="/home/profile" class="nav-item">👤 Mon Profil</router-link>
           <button @click="logout" class="nav-item logout-btn">🚪 Déconnexion</button>
         </div>
       </nav>
     </aside>
 
     <main class="main-content">
-      <header class="top-bar">
-        <div class="user-info">
-          <span>{{ userStore.user.firstname }} {{ userStore.user.lastname }}</span>
-        </div>
-      </header>
-      
       <section class="page-view">
+        <Header />
         <router-view />
       </section>
     </main>
@@ -78,7 +96,18 @@ const logout = () => {
 .logo { font-size: 1.5rem; font-weight: bold; }
 .logo span { color: #3b82f6; font-size: 0.8rem; }
 
-.sidebar-nav { flex: 1; padding: 10px; }
+.sidebar-nav { 
+  flex: 1; 
+  padding: 10px; 
+  overflow-y: scroll; 
+  scroll-bar-width: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+                        
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 .nav-section { margin-bottom: 30px; }
 .section-title {
@@ -103,6 +132,10 @@ const logout = () => {
   color: white;
 }
 
+.logout-btn{
+  background-color: #c0340aff;
+  color: #eee;
+}
 .main-content {
   flex: 1;
   display: flex;

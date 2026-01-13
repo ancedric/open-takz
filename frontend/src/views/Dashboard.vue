@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import { Bar } from 'vue-chartjs';
@@ -8,6 +9,7 @@ import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, Li
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
 
 const userStore = useUserStore();
+const router = useRouter()
 const stats = ref({
   employees: 0,
   projects: 0,
@@ -19,42 +21,35 @@ const stats = ref({
 const loading = ref(true);
 
 const loadDashboardData = async () => {
+  if (!userStore.user) return;
   loading.value = true;
-  const companyRef = userStore.user.companyref;
+  
+  // Utiliser la référence employe pour la cohérence
+  const companyRef = userStore.user.employe.companyref;
 
-  // 1. Compter les employés
-  const { count: empCount } = await supabase
-    .from('user')
-    .select('*', { count: 'exact', head: true })
-    .eq('companyref', companyRef);
+  // 1. Appels parallélisés pour plus de performance
+  const [empRes, projRes, cliRes, transRes, invRes] = await Promise.all([
+    supabase.from('employe').select('*', { count: 'exact', head: true }).eq('companyref', companyRef),
+    supabase.from('project').select('*', { count: 'exact', head: true }).eq('companyref', companyRef), // Filtré par entreprise
+    supabase.from('client').select('*', { count: 'exact', head: true }).eq('companyref_owner', companyRef),
+    supabase.from('finance_transactions').select('amount, category').eq('companyref', companyRef),
+    supabase.from('invoices').select('total_ttc').eq('company_ref', companyRef).eq('status', 'paid')
+  ]);
 
-  // 2. Compter les projets
-  const { count: projCount } = await supabase
-    .from('project')
-    .select('*', { count: 'exact', head: true })
-    .eq('userref', userStore.user.userref); // Filtre par créateur ou département
-
-  // 3. Compter les clients (CRM)
-  const { count: cliCount } = await supabase
-    .from('client')
-    .select('*', { count: 'exact', head: true })
-    .eq('companyref_owner', companyRef);
-
-  // 4. Calculer la Finance
-  const { data: financeData } = await supabase
-    .from('finance_transactions')
-    .select('amount, category')
-    .eq('companyref', companyRef);
-
-  const budget = financeData?.filter(t => t.category === 'budget_allocation').reduce((s, t) => s + t.amount, 0) || 0;
-  const expenses = financeData?.filter(t => t.category === 'expense').reduce((s, t) => s + t.amount, 0) || 0;
+  // 2. Calculs Financiers
+  // Chiffre d'Affaires = Factures encaissées
+  const revenue = invRes.data?.reduce((s, t) => s + t.total_ttc, 0) || 0;
+  
+  // Dépenses = Toutes les catégories 'expense' (inclut désormais les salaires via le trigger)
+  const expenses = transRes.data?.filter(t => t.category === 'expense').reduce((s, t) => s + t.amount, 0) || 0;
 
   stats.value = {
-    employees: empCount || 0,
-    projects: projCount || 0,
-    clients: cliCount || 0,
-    totalBudget: budget,
-    totalExpenses: expenses
+    employees: empRes.count || 0,
+    projects: projRes.count || 0,
+    clients: cliRes.count || 0,
+    totalRevenue: revenue,
+    totalExpenses: expenses,
+    netProfit: revenue - expenses
   };
 
   loading.value = false;
@@ -62,68 +57,50 @@ const loadDashboardData = async () => {
 
 // Données pour le graphique Finance
 const chartData = computed(() => ({
-  labels: ['Budget Alloué', 'Dépenses Réelles'],
+  labels: ['Revenus (Ventes)', 'Dépenses (Salaires & Frais)'],
   datasets: [{
-    label: 'Finance (€)',
+    label: 'Situation Financière (XAF)',
     backgroundColor: ['#22c55e', '#ef4444'],
-    data: [stats.value.totalBudget, stats.value.totalExpenses]
+    borderRadius: 8,
+    data: [stats.value.totalRevenue, stats.value.totalExpenses]
   }]
 }));
 
-onMounted(loadDashboardData);
+onMounted(() =>{
+  if(userStore.user.user.privilege !== 'owner' && userStore.user.user.privilege !== 'admin' && userStore.user.user.privilege !== 'hr') {
+    router.push('/home/employe')}
+  loadDashboardData
+});
 </script>
 
 <template>
   <div class="dashboard">
-    <header class="dash-header">
-      <h1>Tableau de Bord : {{ userStore.user.companyname || 'Mon Entreprise' }}</h1>
-      <p>Bienvenue, {{ userStore.user.firstname }} (Rôle : {{ userStore.user.privilege }})</p>
-    </header>
-
     <div class="grid-stats">
-      <div class="stat-card">
-        <span class="icon">👥</span>
+      <div class="stat-card" :class="{ 'negative': stats.netProfit < 0, 'positive': stats.netProfit > 0 }">
+        <span class="icon">{{ stats.netProfit >= 0 ? '📈' : '📉' }}</span>
         <div class="info">
-          <span class="label">Employés</span>
-          <span class="value">{{ stats.employees }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <span class="icon">💼</span>
-        <div class="info">
-          <span class="label">Projets Actifs</span>
-          <span class="value">{{ stats.projects }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <span class="icon">🤝</span>
-        <div class="info">
-          <span class="label">Clients</span>
-          <span class="value">{{ stats.clients }}</span>
-        </div>
-      </div>
-      <div class="stat-card" :class="{ 'warning': stats.totalExpenses > stats.totalBudget }">
-        <span class="icon">💰</span>
-        <div class="info">
-          <span class="label">Solde</span>
-          <span class="value">{{ (stats.totalBudget - stats.totalExpenses).toLocaleString() }} €</span>
+          <span class="label">Bénéfice Net</span>
+          <span class="value">{{ stats.netProfit }} XAF</span>
         </div>
       </div>
     </div>
 
     <div class="dash-content">
       <div class="chart-container card">
-        <h3>Aperçu Financier</h3>
-        <Bar :data="chartData" :options="{ responsive: true }" />
+        <div class="card-header">
+          <h3>Performance Financière</h3>
+          <span class="badge-year">Année 2026</span>
+        </div>
+        <Bar :data="chartData" :options="{ responsive: true, maintainAspectRatio: false }" style="max-height: 300px;" />
       </div>
 
       <div class="recent-activity card">
         <h3>Actions Rapides</h3>
         <div class="quick-links">
-          <router-link to="/hr" class="q-link">Gérer le personnel</router-link>
-          <router-link to="/crm" class="q-link">Ajouter un client</router-link>
-          <router-link to="/finance" class="q-link">Saisir une facture</router-link>
-          <router-link :to="`/project/${userStore.user.userref}`" class="q-link">Voir mes projets</router-link>
+          <router-link to="/home/hr" class="q-link">👥 Gérer le personnel</router-link>
+          <router-link to="/home/finance" class="q-link">🧾 Créer une facture</router-link>
+          <router-link to="/home/finance" class="q-link">📊 Voir la trésorerie</router-link>
+          <router-link to="/home/archives" class="q-link report-link">📂 Rapports & Archives</router-link>
         </div>
       </div>
     </div>
@@ -131,7 +108,11 @@ onMounted(loadDashboardData);
 </template>
 
 <style scoped>
-.dashboard { padding: 2rem; background: #f8fafc; min-height: 100vh; }
+.dashboard { 
+  padding: 2rem; 
+  padding-top: 60px;
+  background: #f8fafc; 
+  min-height: 100vh; }
 .dash-header { margin-bottom: 2rem; }
 .dash-header h1 { color: #1e293b; margin: 0; }
 
@@ -155,5 +136,42 @@ onMounted(loadDashboardData);
 
 @media (max-width: 1024px) {
   .dash-content { grid-template-columns: 1fr; }
+}
+.stat-card.positive {
+  border-bottom: 4px solid #22c55e;
+}
+
+.stat-card.negative {
+  border-bottom: 4px solid #ef4444;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.badge-year {
+  background: #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #475569;
+}
+
+.value {
+  white-space: nowrap; /* Évite que le gros montant XAF ne revienne à la ligne */
+}
+.q-link.report-link {
+  background: #1e293b;
+  color: white;
+  margin-top: 10px;
+}
+
+.q-link.report-link:hover {
+  background: #334155;
+  transform: scale(1.02);
 }
 </style>

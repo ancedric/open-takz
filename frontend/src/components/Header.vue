@@ -1,22 +1,22 @@
 <template>
     <div class="header-ctn">
         <div class="title">
-            <h1 @click="home">OpenTaskz</h1>
+            <h1 @click="home">{{userStore.user.company?.companyname}}</h1>
         </div>
         <div class="notifs">
             <Notifications />
             
-            <div v-if="!userStore.isLoading && userStore.user" class="profile">
+            <div v-if="!userStore.isLoading && userStore.user?.user" class="profile">
                 <div class="prof-img" @click="isAccountOpen = !isAccountOpen">
-                    <img :src="userStore.user.profilephotourl || '/Default-avatar.png'" :alt="userStore.user.firstname">
+                    <img :src="userStore.user.user.profilephotourl || DefaultAvatar" :alt="userStore.user.user.firstname">
                 </div>
                 <div class="username">
-                    <p>{{ userStore.user.firstname }} {{ userStore.user.lastname }}</p>
+                    <p>{{ userStore.user.user.firstname }} {{ userStore.user.user.lastname }}</p>
                 </div>
                 
                 <div class="account" v-show="isAccountOpen">
                     <ul>
-                        <li class="user">{{ userStore.user.firstname }} {{ userStore.user.lastname }}</li>
+                        <li class="user">{{ userStore.user.user.firstname }} {{ userStore.user.user.lastname }}</li>
                         <li><router-link to="/profile" class="link">My Account</router-link></li>
                         <li><router-link to="/usersConditions" class="link">GCU</router-link></li>
                         <li><router-link to="/legalNotice" class="link">Legal notice</router-link></li>
@@ -35,6 +35,7 @@
 <script setup>
 import Spinner from './Spinner.vue'
 import Notifications from './Notifications.vue'
+import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router'
 import { ref } from 'vue'
 import { useUserStore } from '../store/index'
@@ -45,7 +46,7 @@ const isAccountOpen = ref(false)
 
 const home = () => {
     // Redirection vers le dashboard utilisateur
-    router.push(`/project/${userStore.user.userref}`)
+    router.push(`/project/${userStore.user.user.userref}`)
 }
 
 const handleLogout = async () => {
@@ -58,24 +59,24 @@ const handleLogout = async () => {
     }
 }
 </script>
-
 <style scoped>
+
     .header-ctn{
         display: flex;
-        justify-content: space-around;
-        gap: 20px;
-        width: 100vw;
+        justify-content: space-between;
+        gap: 100px;
+        width: 80%;
         height: 50px;
-        background-color:#eee;
+        background-color: #fff;
         padding: 10px;
         position: fixed;
         z-index: 100;
         top: 0;
-        left:0;
-        box-shadow: 0 0 300px rgba(0, 0, 0, 0.3);
+        left:260px;
+        box-shadow: 0 0 10px rgba(165, 165, 165, 0.3);
 
         .title{
-            width: 15%;
+            width: 45%;
             display: flex;
             justify-content: flex-start;
             align-items: center;

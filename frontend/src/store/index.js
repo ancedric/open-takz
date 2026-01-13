@@ -1,80 +1,162 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import supabase from '../services/supabaseConfig' // Importation du client Supabase
+import supabase from '../services/supabaseConfig.js'
 
 export const useUserStore = defineStore('user', () => {
   const user = ref(null);
-  const isAuthenticated = ref(false);
-  const isLoading = ref(true);
-  const projects = ref([]);
+    const isAuthenticated = ref(false);
+    const isLoading = ref(true);
 
-  // Authentification locale suite au login/register réussi sur Supabase
-  const authenticate = (userData, token) => {
-    user.value = userData
+    // Nouvelles variables d'état pour les projets
+    const projects = ref([]);
+    const currentProject = ref({
+        project: {},
+        tasks: [],
+        team: [],
+        assignments: []
+    });
+
+  const authenticate = (userData, employe, company) => {
+    user.value = {user: userData, employe, company}
     isAuthenticated.value = true
-    // Note: Supabase gère son propre token dans le localStorage (sb-...)
-    // mais nous gardons cette logique si votre app en a besoin ailleurs
-    localStorage.setItem('user-token', token)
+    localStorage.setItem('user', user)
   }
 
-  // Initialisation : Vérifier si une session Supabase existe au chargement
   const init = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (session) {
-      const { data: userData, error } = await supabase
+    const _user = localStorage.getItem('user')
+    if (_user) {
+      try {
+        /*const response = await axios.get(`${import.meta.env.VITE_API_URL}/user`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })*/
+        const {data, error} = await supabase
         .from('user')
         .select('*')
-        .eq('userref', session.user.id)
-        .single();
+        .eq(_user.email)
+        .single()
 
-      if (userData && !error) {
-        user.value = userData
-        isAuthenticated.value = true
-      } else {
-        await logout()
+        if (data) {
+          user.value = data
+          isAuthenticated.value = true
+        } else {
+          logout()
+        }
+      } catch (err) {
+        console.error('Erreur lors de la vérification du token:', err)
+        logout()
       }
     }
     isLoading.value = false
   }
 
-  const logout = async () => {
-    await supabase.auth.signOut()
-    user.value = null;
-    isAuthenticated.value = false;
-    localStorage.removeItem('user-token');
-  }
-
-  // Version simplifiée pour charger les projets via Supabase
-  const getProjects = async () => {
-    if (!user.value) return;
-
-    // Récupère les projets, les tâches associées et les membres de l'équipe en une seule fois
-    const { data, error } = await supabase
-      .from('project')
-      .select(`
-        *,
-        tasks (*),
-        team:project_members (
-          *,
-          user:user (*)
-        )
-      `)
-      .eq('companyref', user.value.companyref);
-
-    if (!error) {
-      projects.value = data;
+    const logout = () => {
+        user.value = null;
+        isAuthenticated.value = false;
+        localStorage.removeItem('user');
     }
-  };
 
-  return {
-    user,
-    isAuthenticated,
-    isLoading,
-    projects,
-    authenticate,
-    logout,
-    init,
-    getProjects
-  };
+// Action pour charger TOUTES les données de tous les projets de l'utilisateur
+    const getProjects = async (deptRef) => {
+      try {
+        if (!deptRef) {
+          console.warn('deptRef manquant.');
+          projects.value = [];
+          return;
+        }
+        // 1. Récupérer tous les projets liés à ce département
+        const { data: projectsData, error: projError } = await supabase
+          .from('project')
+          .select('*')
+          .eq('deptref', deptRef);
+
+        if (projError) throw projError;
+        if (!projectsData || projectsData.length === 0) {
+          projects.value = [];
+          return;
+        }
+
+        // 2. Pour chaque projet trouvé, on récupère les données liées (Tasks, Team, Assignments)
+        const detailedProjectsPromises = projectsData.map(async (project) => {
+          
+          // Récupération simultanée des tâches et de l'équipe pour ce projet
+          const [tasksRes, teamRes] = await Promise.all([
+            supabase.from('task').select('*').eq('projectref', project.projectref),
+            supabase.from('team').select('*').eq('projectref', project.projectref)
+          ]);
+
+          const tasks = tasksRes.data || [];
+          const team = teamRes.data || [];
+
+          // 3. Récupérer les détails des utilisateurs de l'équipe
+          const teamWithUserDetails = await Promise.all(
+            team.map(async (member) => {
+              const { data: userData } = await supabase
+                .from('user')
+                .select('*')
+                .eq('userref', member.userref)
+                .single();
+              return { ...member, user: userData };
+            })
+          );
+
+          // 4. Récupérer les assignations pour toutes les tâches du projet
+          let allAssignments = [];
+          if (tasks.length > 0) {
+            const taskRefs = tasks.map(t => t.taskref);
+            const { data: assignmentsData } = await supabase
+              .from('assignments') // Vérifie l'orthographe "assignments" (tu avais "assisgnments")
+              .select('*')
+              .in('taskref', taskRefs);
+            
+            // Ajouter les infos utilisateurs aux assignations
+            allAssignments = await Promise.all(
+              (assignmentsData || []).map(async (ass) => {
+                const { data: userData } = await supabase
+                  .from('user')
+                  .select('*')
+                  .eq('userref', ass.userref)
+                  .single();
+                return { ...ass, user: userData };
+              })
+            );
+          }
+          
+          return {
+            project: project,
+            tasks: tasks,
+            team: teamWithUserDetails,
+            assignments: allAssignments
+          };
+        });
+
+        projects.value = await Promise.all(detailedProjectsPromises);
+      } catch (err) {
+        console.error('Erreur lors du chargement des projets du département:', err);
+      }
+    };
+
+    // Action pour définir le projet courant, sans appel API
+    const setCurrentProject = (projectRef) => {
+        const project = projects.value.find(p => p.project.projectref === projectRef);
+        if (project) {
+            currentProject.value = project;
+        } else {
+            console.error('Projet introuvable dans le store:', projectRef);
+        }
+    };
+
+    return {
+        user,
+        isAuthenticated,
+        isLoading,
+        projects,
+        currentProject,
+        authenticate,
+        logout,
+        init,
+        getProjects,
+        setCurrentProject
+    };
 });

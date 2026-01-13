@@ -1,4 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import supabase from './services/supabaseConfig.js'
+import { ref, onMounted } from 'vue'
+import { useUserStore } from './store/index'
 
 // Vos imports originaux
 import LandingPage from './views/LandingPage.vue'
@@ -8,7 +11,7 @@ import EditTask from './views/EditTask.vue'
 import Profile from './views/Profile.vue'
 import Login from './views/Login.vue'
 import Register from './views/Register.vue'
-import ConfirmEmail from './views/ConfirmEmail.vue'
+import EmployePortal from './views/EmployeePortal.vue'
 import EditProfile from './views/EditProfile.vue'
 import SetProfile from './views/SetProfile.vue'
 import Pricing from './views/Pricing.vue'
@@ -21,17 +24,27 @@ import CreateCompany from './views/CreateCompany.vue'
 import JoinCompany from './views/JoinCompany.vue'
 import FinanceManagement from './views/FinanceManagement.vue'
 import HRManagement from './views/HRManagement.vue'
-import { useUserStore } from './store/index.js'
+import AccountingManagement from './views/AccountingManagement.vue'
+import CRMManagement from'./views/CRMManagement.vue'
+import Dashboard from './views/Dashboard.vue'
+import ClosingArchives from './views/ClosingArchives.vue'
 import ModuleLayout from './Layout/ModuleLayout.vue'
+
+const departments = ref([])
+
+onMounted(async () => {
+    // Charger les départements et clients au montage
+    const { data: depts } = await supabase.from('department').select('*').eq('companyref', userStore.user.company.companyref)
+    departments.value = depts || []
+})
 
 const routes = [
   // ROUTES PUBLIQUES (Hors structure ERP)
   { path: '/', component: LandingPage },
   { path: '/auth', component: Login },
   { path: '/register', component: Register },
-  { path: '/confirmation', component: ConfirmEmail },
   { path: '/pricing', component: Pricing },
-  { path: '/usersConditions', component: UsersConditions },
+  { path: '/users-conditions', component: UsersConditions },
   { path: '/privacyPolicy', component: PrivacyPolicy },
   { path: '/legalNotice', component: LegalNotice },
   { path: '/support', component: Support },
@@ -39,44 +52,88 @@ const routes = [
   { path: '/create-company/:userref', component: CreateCompany },
   { path: '/join-company/:userref', component: JoinCompany },
 
-  // ROUTES DE L'ERP (V2 utilisant le Layout Modulaire)
-  {
-    path: '/',
+   {
+    path: '/home',
     component: ModuleLayout,
     children: [
-      { path: 'home', component: ModuleLayout },
-      { path: 'project/:userRef', component: Project },
-      { path: 'addTask/:title', component: AddTask },
-      { path: 'editTask/:id/title/:title/desc/:description', component: EditTask },
+      { path: '', component: Dashboard },
       { path: 'profile', component: Profile },
-      { path: 'editProfile', component: EditProfile },
-      { path: 'setProfile', component: SetProfile },
-      
-      // NOUVEAUX MODULES (V2)
       { 
-        path: 'hr', 
-        component: HRManagement,
+        path: 'department/:deptName/:deptid', 
+        name: 'department-view',
+        component: Project, 
+        props: true,
         beforeEnter: (to, from, next) => {
           const userStore = useUserStore();
-          if (userStore.user.privilege === 'owner' || userStore.user.privilege === 'hr') {
+
+          if (['owner', 'admin', 'hr'].includes(userStore.user.employe.privilege)) {
             next();
           } else {
-            next('/home'); // Redirige si pas autorisé
+            next('/home');
           }
         }
       },
-      { 
-        path: 'finance', 
-        component: FinanceManagement,
+      
+      // ROUTES FIXES POUR LES MODULES SPÉCIAUX
+      { path: 'hr', component: HRManagement,
         beforeEnter: (to, from, next) => {
           const userStore = useUserStore();
-          // Seul le propriétaire peut voir la finance pour l'instant
-          if (userStore.user.privilege === 'owner') next();
-          else next('/home');
+
+          if (['owner', 'admin', 'hr'].includes(userStore.user.employe.privilege)) {
+            next();
+          } else {
+            next('/home');
+          }
+        }
+       },
+      { path: 'accounting', component: AccountingManagement,
+        beforeEnter: (to, from, next) => {
+          const userStore = useUserStore();
+
+          if (['owner', 'admin', 'hr'].includes(userStore.user.employe.privilege)) {
+            next();
+          } else {
+            next('/home');
+          }
+        }
+       },
+      { path: 'finance', component: FinanceManagement,
+        beforeEnter: (to, from, next) => {
+          const userStore = useUserStore();
+
+          if (['owner', 'admin', 'hr'].includes(userStore.user.employe.privilege)) {
+            next();
+          } else {
+            next('/home');
+          }
+        }
+       },
+      { path: 'crm', component: CRMManagement,
+        beforeEnter: (to, from, next) => {
+          const userStore = useUserStore();
+
+          if (['owner', 'admin', 'hr'].includes(userStore.user.employe.privilege)) {
+            next();
+          } else {
+            next('/home');
+          }
+        }
+       },
+      { path: 'archives', component: ClosingArchives,
+        beforeEnter: (to, from, next) => {
+          const userStore = useUserStore();
+
+          if (['owner', 'admin', 'hr'].includes(userStore.user.employe.privilege)) {
+            next();
+          } else {
+            next('/home');
+          }
         }
       },
+      { path: 'employe', component: EmployePortal }
     ]
-  },
+  }
+  
 ]
 
 const router = createRouter({

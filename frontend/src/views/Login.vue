@@ -20,8 +20,9 @@
             {{ showPassword ? 'Hide password' : 'Show password' }}
         </div>
         <button type="submit" class="auth-btn">{{ submitting ? 'Please wait...' : 'Sign In' }}</button>
+        <p class="switch">Don't have an account ? <router-link to="/register">Sign Up</router-link></p>
+        <p class="switch">En entrant dans l'application vous acceptez nos <router-link to="/users-conditions">conditions d'utilisation</router-link></p>
       </form>
-      <p class="switch">Don't have an account ? <router-link to="/register">Sign Up</router-link></p>
     </div>
   </div>
   <Alert type="danger" action="emptyField" v-if="notFilled"/>
@@ -78,17 +79,35 @@ const handleSubmit = async () => {
         if (dbError) throw dbError;
 
         if (userData) {
-            // 4. Stockage dans le store Pinia (on utilise le token de session Supabase)
-            const session = authData.session;
-            userStore.authenticate(userData, session.access_token);
-            
-            success.value = true;
-            errors.value = false;
-            
-            // 5. Redirection vers le dashboard ou les projets
-            setTimeout(() => {
-                router.push('/home'); // Ou router.push('/project/' + userData.userref)
-            }, 1500);
+          //Onrécupère l'employé associé à l'utilisateur
+          const {data: empData, error: empError} = await supabase
+            .from('employe')
+            .select('*')
+            .eq('userref', userData.userref)
+            .single()
+
+            if(empError) throw empError
+            if(empData){
+              const employe = empData
+              const {data: companyData, error: companyError} = await supabase
+                .from('company')
+                .select('*')
+                .eq('companyref', empData.companyref)
+
+                if(companyError) throw companyError
+                const company = companyData[0]
+                // 4. Stockage dans le store Pinia (on utilise le token de session Supabase)
+                const session = authData.session;
+                userStore.authenticate(userData, employe, company);
+                
+                success.value = true;
+                errors.value = false;
+                
+                // 5. Redirection vers le dashboard ou les projets
+                setTimeout(() => {
+                    router.push('/home'); // Ou router.push('/project/' + userData.userref)
+                }, 1500);
+            }
         }
     } catch (error) {
         console.error('Erreur de connexion:', error.message);
@@ -112,12 +131,9 @@ const handleSubmit = async () => {
         justify-content: center;
         align-items: center;
         width: 70vw;
-        height: 80vh;
         margin-left: 50%;
         transform: translate(-50%, 5%);
-        background-color: #eee;
         border-radius: 30px;
-        box-shadow: 1px 1px 50px rgba(0, 0, 0, 0.3);
         overflow: hidden;
         @media screen and (max-width: 860px){
             display: flex;
@@ -125,7 +141,6 @@ const handleSubmit = async () => {
             justify-content: flex-start;
             align-items: center;
             width: 95vw;
-            height: 95vh;
             padding: 0;
         }
     }
@@ -134,17 +149,18 @@ const handleSubmit = async () => {
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      height: 80%;
-      width: 300px;
+      gap: 20px;
+      height: 60vh;
+      width: 700px;
       margin-top: 20px;
       border-radius: 15px;
       border: 2px solid #9da6e0;
     }
     .auth-ctn form .input-ctn .set-input{
-        height: 33px;
+        height: 40px;
         width: 100%;
         border-radius: 10px;
-        background-color: #eee;
+        background-color: transparent;
         color: #9da6e0;
         padding-left: 10px;
         font-family: Poppins;
@@ -153,9 +169,10 @@ const handleSubmit = async () => {
     }
     .auth-ctn form .input-ctn{
         height: 43px;
-        width: 200px;
+        width: 450px;
         color: #9da6e0;
         margin: 0;
+        padding-top: 10px;
         padding-right: 25px;
         font-family: Poppins;
         position: relative;
@@ -165,7 +182,7 @@ const handleSubmit = async () => {
         top: -5px;
         left: 30px;
         font-size: 0.8rem;
-        background-color: #eee;
+        background-color: #fff;
         padding-left: 5px;
         padding-right: 5px;
         z-index: 1;
@@ -186,7 +203,7 @@ const handleSubmit = async () => {
         margin-top: 10px;
     }
     .hideOrShow{
-      width: 200px;
+      width: 450px;
       padding-top: 0;
       font-family: Poppins;
       font-size: 0.6rem;

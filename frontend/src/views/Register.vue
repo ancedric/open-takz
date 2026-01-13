@@ -1,12 +1,12 @@
 <template>
-  <div class="page">
+  <div>
     <div class="auth-ctn">
       <h3>SIGN UP</h3>
       <form @submit.prevent="handleSubmit">
         <div class="input-ctn">
           <div class="label">Type de compte</div>
           <select class="set-input" v-model="accountType">
-            <option value="owner">Chef d'entreprise (Owner)</option>
+            <option value="owner">Chef d'entreprise</option>
             <option value="employee">Employé</option>
           </select>
         </div>
@@ -30,8 +30,13 @@
             {{ showPassword ? 'Hide password' : 'Show password' }}
         </div>
         <div class="input-ctn">
+          <div class="label">Phone number</div>
+          <input type="phone" class="set-input" v-model="phone" placeholder="+xxx xxxxxxxxx">
+        </div>
+        <div class="input-ctn">
           <div class="label">Country</div>
           <select class="set-input" v-model="country">
+            <option default>Choisissez un pays</option>
             <option value="Algeria">Algeria</option>
             <option value="Angola">Angola</option>
             <option value="Argentina">Argentina</option>
@@ -109,9 +114,11 @@
           <input type="file" class="set-input" v-on:change="onFileChange" placeholder="choose a profile photo">
         </div>
         <button type="submit" class="auth-btn">{{ submitting ? 'Please wait...' : 'Sign In' }}</button>
+        <p class="switch">Already have an account ? <router-link to="/auth">Sign In</router-link></p>
+        <p class="switch">En vous inscrivant ous acceptez nos <router-link to="/users-conditions">conditions d'utilisation</router-link></p>
       </form>
-      <p class="switch">Already have an account ? <router-link to="/auth">Sign In</router-link></p>
     </div>
+    
   </div>
   <Alert type="danger" action="emptyField" v-if="notFilled"/>
   <Alert type="danger" action="error" v-if="errors"/>
@@ -130,6 +137,7 @@ const firstname = ref('');
 const lastname = ref('');
 const userEmail = ref('');
 const userPassword = ref('');
+const phone = ref('');
 const country = ref('');
 const city = ref('');
 const profilePhoto = ref(null);
@@ -160,7 +168,6 @@ const onFileChange = (e) => {
     }
 
     profilePhoto.value = file;
-    
     // Création de l'URL de prévisualisation
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -171,77 +178,102 @@ const onFileChange = (e) => {
 };
 
 
+// Dans ton Register.vue, remplace handleSubmit par ceci :
+
 const handleSubmit = async () => {
-  submitting.value = true;
-  
-  // Validation des champs requis
   if (!userEmail.value || !userPassword.value || !firstname.value || !lastname.value) {
     notFilled.value = true;
-    setTimeout(() => notFilled.value = false, 3000);
-    submitting.value = false;
+    setTimeout(() => (notFilled.value = false), 3000);
     return;
   }
 
+  submitting.value = true;
+  let publicProfileUrl = null;
+
   try {
-    // 1. Inscription dans Supabase Auth
-    const { data, error: authError } = await supabase.auth.signUp({
+    // ÉTAPE 1 : Créer d'abord le compte Auth (Indispensable pour avoir les droits d'upload)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userEmail.value,
       password: userPassword.value,
       options: {
-        data: {
-          firstname: firstname.value,
-          lastname: lastname.value,
-          accountType: accountType.value // Stocké dans les metadata
-        }
+        data: { firstname: firstname.value, lastname: lastname.value }
       }
     });
 
     if (authError) throw authError;
 
-    let profileUrl = null;
-    if (profilePhoto.value) {
-        const fileExt = profilePhoto.value.name.split('.').pop();
-        const fileName = `${data.user.id}.${fileExt}`; 
-        const filePath = `profiles/${fileName}`;
-        
-        await supabase.storage
-            .from(import.meta.env.VITE_VUE_JS_SUPABASE_BUCKET  || 'opentasks_bucket')
-            .upload(filePath, profilePhoto.value);
-            
-        const { data: urlData } = supabase.storage.from('profiles').getPublicUrl(fileName);
-        profileUrl = urlData.publicUrl;
-    }
+    if (authData.user) {
+      // ÉTAPE 2 : Maintenant qu'on est connecté, on upload la photo
+      if (profilePhoto.value) {
+        const file = profilePhoto.value;
+        const fileExt = file.name.split('.').pop();
+        // On utilise l'ID de l'user pour un nom unique et propre
+        const filePath = `profiles/${authData.user.id}.${fileExt}`; 
 
-    const { data:dbData, error: dbError } = await supabase
+        const { error: uploadError } = await supabase.storage
+          .from('opentasks_bucket')
+          .upload(filePath, file);
+
+        if (uploadError) {
+          console.error('Détails erreur storage:', uploadError);
+          // On ne bloque pas l'inscription si seule l'image échoue
+        } else {
+          const { data: urlData } = supabase.storage
+            .from('opentasks_bucket')
+            .getPublicUrl(filePath); // Utiliser filePath ici !
+          publicProfileUrl = urlData.publicUrl;
+        }
+      }
+
+      // ÉTAPE 3 : Insertion dans la table 'user'
+      const { data: userData, error: dbError } = await supabase
         .from('user')
-        .insert([{
-            userref: data.user.id,
+        .insert([
+          {
+            userref: authData.user.id,
+            profilephotourl: publicProfileUrl,
+            email: userEmail.value,
             firstname: firstname.value,
             lastname: lastname.value,
-            email: userEmail.value,
-            password: 'AUTH_MANAGED',
-            profilephotourl: profileUrl, // On enregistre l'URL publique ici
-            privilege: accountType.value === 'owner' ? 'owner' : 'user'
-        }])
-        .select();
+            phone: phone.value,     // Ajout de .value
+            country: country.value, // Ajout de .value
+            city: city.value,       // Ajout de .value
+            privilege: accountType.value === 'owner' ? 'owner' : 'employee'
+          }
+        ])
+        .select() // IMPORTANT pour récupérer userData après l'insert
+        .single();
 
-    if (dbError) throw dbError;
+      if (dbError) throw dbError;
 
-    success.value = true;
-    
-    // 3. Redirection selon le type de compte
-    setTimeout(() => {
-      if (accountType.value === 'owner') {
-        router.push(`/create-company/${dbData[0].userref}`);
-      } else {
-        router.push('/join-company/'+ dbData[0].userref);
+      // ÉTAPE 4 : Insertion dans 'employe'
+      if (userData) {
+        const empRef = 'EMP-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+        const { error: empError } = await supabase
+          .from('employe')
+          .insert([{
+            empref: empRef,
+            userref: userData.userref,
+            position: accountType.value === 'owner' ? 'owner' : 'A définir',
+            privilege: accountType.value === 'owner' ? 'owner' : 'employee'
+          }]);
+        
+        if (empError) throw empError;
+
+        success.value = true;
+        setTimeout(() => {
+          if (accountType.value === 'owner') {
+            router.push(`/create-company/${userData.userref}`);
+          } else {
+            router.push(`/join-company/${userData.userref}`);
+          }
+        }, 2000);
       }
-    }, 1500);
-
-  } catch (error) {
-    console.error('Erreur:', error.message);
+    }
+  } catch (err) {
+    console.error('Erreur inscription:', err);
     errors.value = true;
-    setTimeout(() => errors.value = false, 3000);
+    setTimeout(() => (errors.value = false), 3000);
   } finally {
     submitting.value = false;
   }
@@ -255,21 +287,14 @@ const handleSubmit = async () => {
         justify-content: center;
         align-items: center;
         width: 70vw;
-        height: 80vh;
         margin-left: 50%;
         transform: translate(-50%, 5%);
-        background-color: #eee;
-        border-radius: 30px;
-        box-shadow: 1px 1px 200px rgba(0, 0, 0, 0.3);
         overflow: hidden;
         @media screen and (max-width: 860px){
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
             align-items: center;
-            width: 95vw;
-            height: 95vh;
-            padding: 0;
         }
     }
     .auth-ctn form{
@@ -277,17 +302,18 @@ const handleSubmit = async () => {
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      height: 80%;
-      width: 300px;
-      margin-top: 20px;
+      gap: 20px;
+      width: 700px;
+      margin-top: 10px;
+      padding: 15px;
       border-radius: 15px;
       border: 2px solid #9da6e0;
     }
-    .auth-ctn form .input-ctn .set-input{
-        height: 33px;
+    .auth-ctn form .input-ctn .set-input{ 
+        height: 40px;
         width: 100%;
         border-radius: 10px;
-        background-color: #eee;
+        background-color: transparent;
         color: #9da6e0;
         padding-left: 10px;
         font-family: Poppins;
@@ -296,9 +322,10 @@ const handleSubmit = async () => {
     }
     .auth-ctn form .input-ctn{
         height: 43px;
-        width: 200px;
+        width: 450px;
         color: #9da6e0;
         margin: 0;
+        padding-top: 10px;
         padding-right: 25px;
         font-family: Poppins;
         position: relative;
@@ -308,7 +335,7 @@ const handleSubmit = async () => {
         top: -5px;
         left: 30px;
         font-size: 0.8rem;
-        background-color: #eee;
+        background-color: #fff;
         padding-left: 5px;
         padding-right: 5px;
         z-index: 1;
@@ -329,7 +356,7 @@ const handleSubmit = async () => {
         margin-top: 10px;
     }
     .hideOrShow{
-      width: 200px;
+      width: 450px;
       padding-top: 0;
       font-family: Poppins;
       font-size: 0.6rem;

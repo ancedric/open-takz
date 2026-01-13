@@ -39,7 +39,7 @@ const handleJoin = async (company) => {
   if (!error) {
     // Mise à jour du store local
     userStore.user.companyref = company.companyref;
-    router.push('/home');
+    router.push('/auth');
   }
   loading.value = false;
 };

@@ -166,11 +166,13 @@ onMounted(() => {
 .charts-container {
   display: flex;
   justify-content: center;
-  width: 100%;
+  width: 95%;
   padding: 20px;
-  background: #f9f9f9;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background: #f8fafc; 
+  padding: 1rem; 
+  border-radius: 10px; 
+  margin-bottom: 2rem;
+  border: 1px dashed #cbd5e1;
 
   @media (max-width: 768px) {
     flex-direction: column;

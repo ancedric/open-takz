@@ -8,6 +8,12 @@ const userStore = useUserStore();
 const router = useRouter();
 const companyName = ref('');
 const logoFile = ref(null);
+const legalForm = ref('');
+const companyAddress = ref('')
+const registerdNumber = ref('');
+const companyEmail = ref('')
+const companyPhone = ref('')
+const companyCountry = ref(null)
 const loading = ref(false);
 const userref = router.currentRoute.value.params.userref;
 
@@ -23,19 +29,19 @@ const handleCreate = async () => {
   let publicLogoUrl = null;
 
   try {
-    // 1. Upload du Logo si présent
+    // 1. Upload du Logo
     if (logoFile.value) {
       const fileExt = logoFile.value.name.split('.').pop();
       const fileName = `${companyRef}.${fileExt}`;
-      const filePath = `company/logos/${fileName}`;
+      const filePath = `company/logos/${fileName}`; 
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('opentasks_bucket')
         .upload(filePath, logoFile.value);
 
       if (uploadError) throw uploadError;
       
-      const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName);
+      const { data: urlData } = supabase.storage.from('opentasks_bucket').getPublicUrl(filePath);
       publicLogoUrl = urlData.publicUrl;
     }
 
@@ -46,20 +52,40 @@ const handleCreate = async () => {
         companyref: companyRef, 
         companyname: companyName.value, 
         logo_url: publicLogoUrl,
+        legal_form: legalForm.value,
+        country: companyCountry.value,
+        email: companyEmail.value,
+        address: companyAddress.value,
+        register_number: registerdNumber.value, 
+        phone: companyPhone.value,
         owner_ref: userref 
       }]);
 
     if (compError) throw compError;
 
-    // 3. Promotion de l'utilisateur en Owner
-    await supabase
-      .from('user')
-      .update({ companyref: companyRef, privilege: 'owner' })
-      .eq('userref', userref);
+    // 3. Promotion de l'utilisateur ET création des départements en PARALLÈLE
+    // On regroupe les départements dans un seul insert pour économiser le réseau
+    const departments = [
+      { deptref: 'DPT-RH-' + Math.random().toString(36).substr(2, 4), deptname: 'Ressources humaines', companyref: companyRef, manager_ref: userref },
+      { deptref: 'DPT-ACC-' + Math.random().toString(36).substr(2, 4), deptname: 'Comptabilité', companyref: companyRef, manager_ref: userref },
+      { deptref: 'DPT-MKT-' + Math.random().toString(36).substr(2, 4), deptname: 'Marketing', companyref: companyRef, manager_ref: userref },
+      { deptref: 'DPT-FIN-' + Math.random().toString(36).substr(2, 4), deptname: 'Finances', companyref: companyRef, manager_ref: userref }
+    ];
 
-    router.push('/home');
+    const [empRes, deptRes] = await Promise.all([
+      supabase.from('employe').update({ companyref: companyRef, privilege: 'owner' }).eq('userref', userref),
+      supabase.from('department').insert(departments)
+    ]);
+
+    if (empRes.error) throw empRes.error;
+    if (deptRes.error) throw deptRes.error;
+
+    alert("Entreprise et départements créés avec succès !");
+    router.push('/auth');
+
   } catch (err) {
-    alert(err.message);
+    console.error('Erreur détaillée:', err);
+    alert("Erreur de connexion au serveur. Vérifiez votre accès internet ou la configuration Supabase.");
   } finally {
     loading.value = false;
   }
@@ -72,11 +98,115 @@ const handleCreate = async () => {
       <h3>Enregistrez votre entreprise</h3>
       <div class="input-ctn">
         <div class="label">Nom de l'entreprise</div>
-        <input v-model="companyName" class="set-input" placeholder="Nom officiel">
+        <input v-model="companyName" class="set-input" required placeholder="Nom officiel">
       </div>
       <div class="input-ctn">
         <div class="label">Logo</div>
         <input type="file" @change="onFileChange" class="set-input">
+      </div>
+      <div class="input-ctn">
+        <div class="label">Forme juridique</div>
+        <select class="set-input" required v-model="legalForm">
+          <option value="" disabled selected>>Choisissez une option</option>
+            <option value="ETS">ETS/EI</option>
+            <option value="SA">SA</option>
+            <option value="SARL">SARL</option>
+            <option value="SNC">SNC</option>
+            <option value="SCS">SCS</option>
+            <option value="SAS">SAS</option>
+            <option value="GIE">GIE</option>
+            <option value="EURL">EURL</option>
+            <option value="SASU">SASU</option>
+            <option value="SCI">SCI</option>
+          </select>
+        </div>
+      <div class="input-ctn">
+        <div class="label">Country</div>
+        <select class="set-input" required v-model="companyCountry">
+          <option dvalue="" disabled selected>>Choisissez un pays</option>
+            <option value="Algeria">Algeria</option>
+            <option value="Angola">Angola</option>
+            <option value="Argentina">Argentina</option>
+            <option value="Australia">Australia</option>
+            <option value="Austria">Austria</option>
+            <option value="Belgium">Belgium</option>
+            <option value="Benin">Benin</option>
+            <option value="Botswana">Botswana</option>
+            <option value="Brazil">Brazil</option>
+            <option value="Burkina Faso">Burkina Faso</option>
+            <option value="Burundi">Burundi</option>
+            <option value="Cabo Verde">Cabo Verde</option>
+            <option value="Canada">Canada</option>
+            <option value="Cameroon">Cameroon</option>
+            <option value="Central African Republic">Central African Republic</option>
+            <option value="Chad">Chad</option>
+            <option value="Chile">Chile</option>
+            <option value="China">China</option>
+            <option value="Colombia">Colombia</option>
+            <option value="Congo">Congo</option>
+            <option value="Comoros">Comoros</option>
+            <option value="Congo">Congo</option>
+            <option value="Côte d'Ivoire">Côte d'Ivoire</option>
+            <option value="Czech Republic">Czech Republic</option>
+            <option value="Democratic Republic of the Congo">Democratic Republic of the Congo</option>
+            <option value="Denmark">Denmark</option>
+            <option value="Equatorial Guinea">Equatorial Guinea</option>
+            <option value="Egypt">Egypt</option>
+            <option value="Ethiopia">Ethiopia</option>
+            <option value="France">France</option>
+            <option value="Gabon">Gabon</option>
+            <option value="Ghana">Ghana</option>
+            <option value="India">India</option>
+            <option value="Indonesia">Indonesia</option>
+            <option value="Iran">Iran</option>
+            <option value="Iraq">Iraq</option>
+            <option value="Italy">Italy</option>
+            <option value="Japan">Japan</option>
+            <option value="Kenya">Kenya</option>
+            <option value="Mexico">Mexico</option>
+            <option value="Morocco">Morocco</option>
+            <option value="Nigeria">Nigeria</option>
+            <option value="Pakistan">Pakistan</option>
+            <option value="Peru">Peru</option>
+            <option value="Philippines">Philippines</option>
+            <option value="Portugal">Portugal</option>
+            <option value="Qatar">Qatar</option>
+            <option value="Russia">Russia</option>
+            <option value="Saudi Arabia">Saudi Arabia</option>
+            <option value="South Africa">South Africa</option>
+            <option value="Spain">Spain</option>
+            <option value="Sudan">Sudan</option>
+            <option value="Sweden">Sweden</option>
+            <option value="Switzerland">Switzerland</option>
+            <option value="Thailand">Thailand</option>
+            <option value="Turkey">Turkey</option>
+            <option value="Ukraine">Ukraine</option>
+            <option value="United Kingdom">United Kingdom</option>
+            <option value="United States">United States</option>
+            <option value="Venezuela">Venezuela</option>
+            <option value="Vietnam">Vietnam</option>
+            <option value="Uganda">Uganda</option>
+            <option value="Tanzania">Tanzania</option>
+            <option value="Rwanda">Rwanda</option>
+            <option value="Zambia">Zambia</option>
+            <option value="Zimbabwe">Zimbabwe</option>
+          </select>
+        </div>
+      <div class="input-ctn">
+        <div class="label">Siège social</div>
+        <input type="text" v-model="companyAddress" class="set-input" required placeholder="Adresse officielle">
+      </div>
+      <div class="input-ctn">
+        <div class="label">Numéro du régistre</div>
+        <input type="text" v-model="registerdNumber" class="set-input" required placeholder="Numéro du Régistre de Commerce">
+      </div>
+      <div class="input-ctn">
+        <div class="label">Téléphone de l'entreprise</div>
+        <input type="phone" v-model="companyPhone" class="set-input" required placeholder="Numéro de téléphone officiel">
+      </div>
+      <div class="input-ctn">
+        <div class="label">Adresse email de l'entreprise</div>
+        <input type="email" v-model="companyEmail" class="set-input" required placeholder="Adresse email officielle">
       </div>
       <button @click="handleCreate" class="auth-btn" :disabled="loading">
         {{ loading ? 'Création...' : 'Créer mon espace' }}
@@ -95,20 +225,15 @@ const handleCreate = async () => {
         justify-content: center;
         align-items: center;
         width: 70vw;
-        height: 80vh;
         margin-left: 50%;
         transform: translate(-50%, 5%);
-        background-color: #eee;
         border-radius: 30px;
-        box-shadow: 1px 1px 200px rgba(0, 0, 0, 0.3);
         overflow: hidden;
         @media screen and (max-width: 860px){
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
             align-items: center;
-            width: 95vw;
-            height: 95vh;
             padding: 0;
         }
     }
@@ -117,8 +242,8 @@ const handleCreate = async () => {
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        height: 80%;
-        width: 300px;
+        gap: 20px;
+        width: 700px;
         margin-top: 20px;
         border-radius: 15px;
         border: 2px solid #9da6e0;
@@ -127,7 +252,7 @@ const handleCreate = async () => {
         height: 40px;
         width: 100%;
         border-radius: 10px;
-        background-color: #eee;
+        background-color: transparent;
         color: #9da6e0;
         padding-left: 10px;
         font-family: Poppins;
@@ -136,7 +261,7 @@ const handleCreate = async () => {
     }
     .auth-ctn form .input-ctn{
         height: 43px;
-        width: 200px;
+        width: 450px;
         color: #9da6e0;
         margin: 15px;
         padding-right: 25px;
@@ -148,7 +273,7 @@ const handleCreate = async () => {
         top: -5px;
         left: 30px;
         font-size: 0.8rem;
-        background-color: #eee;
+        background-color: #fff;
         padding-left: 5px;
         padding-right: 5px;
         z-index: 1;
