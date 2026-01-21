@@ -21,7 +21,7 @@ setInterval(() => {
 
 const fetchMyData = async () => {
   loading.value = true;
-  const empId = userStore.user.employe.empref;
+  const empId = userStore.user.employe.id;
   const companyRef = userStore.user.company.companyref;
 
   try {
@@ -42,20 +42,37 @@ const fetchMyData = async () => {
     companyInfo.value = comp;
 
     // 3. Projets (où l'employé est dans l'équipe)
-    const { data: projects } = await supabase
-      .from('project')
-      .select('*')
-      .contains('team_members', [empId]); // Adapté si team_members est un array d'IDs
-    myProjects.value = projects || [];
+    const { data: teamMemberships, error: teamErr } = await supabase
+      .from('team')
+      .select('projectref, role')
+      .eq('userref', userStore.user.user.ref);
 
-    // 4. Mes Tâches
-    const { data: tasks } = await supabase
+    if (teamErr) throw teamErr;
+
+    if (teamMemberships && teamMemberships.length > 0) {
+      // Extraire tous les projectref uniques
+      const projectRefs = teamMemberships.map(t => t.projectref);
+
+      // 3.2. Récupérer les détails des projets correspondants
+      const { data: projects, error: projErr } = await supabase
+        .from('project')
+        .select('*')
+        .in('projectref', projectRefs); // Utilise 'in' pour filtrer par liste
+
+      if (projErr) throw projErr;
+      myProjects.value = projects || [];
+    }
+
+    // 3.3. Mes Tâches (filtrées par userref)
+    // Note : Vérifie si dans ta table 'task' le champ est 'assigned_to' ou 'userref'
+    const { data: tasks, error: taskErr } = await supabase
       .from('task')
-      .select('*, project:project_id(projectname)')
-      .eq('assigned_to', empId)
-      .order('deadline', { ascending: true });
-    myTasks.value = tasks || [];
+      .select('*, project:projectref(projectname)')
+      .eq('assigned_to', userStore.user.user.ref) 
+      .order('enddate', { ascending: true });
 
+    if (taskErr) console.error("Erreur Tâches:", taskErr.message);
+    myTasks.value = tasks || [];
   } catch (err) {
     console.error("Erreur portail:", err.message);
   } finally {
@@ -73,13 +90,18 @@ const getTaskStatus = (task) => {
 };
 
 const checkTodayAttendance = async () => {
-  const today = new Date().toISOString().split('T')[0];
-  const { data } = await supabase
+  const empId = userStore.user.employe?.id;
+  if (!empId) return;
+
+const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await supabase
     .from('attendance')
     .select('*')
-    .eq('employee_id', userStore.user.employe.id)
+    .eq('employee_id', empId)
     .eq('date', today)
-    .single();
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') console.error(error);
   if (data) attendanceRecord.value = data;
 };
 
@@ -91,13 +113,13 @@ const handlePunch = async () => {
     const limitTime = 8;
     const isLate = now.getHours() >= limitTime && now.getMinutes() > 0;
     const { data, error } = await supabase.from('attendance').insert([{
-      employeeref: userStore.user.employe.empref,
+      employee_id: userStore.user.employe.id,
       companyref: userStore.user.employe.companyref,
       date: today,
       check_in: now.toISOString(),
       status: isLate ? 'retard' : 'present'
     }]).select().single();
-    if (!error) attendanceRecord.value = data;
+    if (!error)attendanceRecord.value = data;
   } else {
     if (attendanceRecord.value.check_out) return alert("Journée terminée.");
     const { data, error } = await supabase.from('attendance')
@@ -109,7 +131,7 @@ const handlePunch = async () => {
 };
 
 onMounted(() => {
-    fetchMyData(); // Correction : manquait les parenthèses ()
+    fetchMyData();
     checkTodayAttendance();
 });
 </script>

@@ -34,6 +34,9 @@ const privilege = ref('employe');
 const legalForm = ref(''); // Récupéré depuis l'objet company
 const companyData = ref(null);
 const isProcessing = ref(false);
+const showFileModal = ref(false);
+const uploadingFile = ref(false);
+const selectedEmployee = ref(null);
 const selectedMonth = ref(new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' }));
 
 const pendingLeaves = ref([]);
@@ -50,6 +53,62 @@ const checkAccess = () => {
   }
 };
 
+const openEmployeeFile = (emp) => {
+  selectedEmployee.value = emp;
+  showFileModal.value = true;
+};
+
+const closeFileModal = () => {
+  showFileModal.value = false;
+  selectedEmployee.value = null;
+};
+
+const uploadDoc = async (event, type, empId) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  uploadingFile.value = true;
+  const fileExt = file.name.split('.').pop();
+  const filePath = `docs/${empId}/${type}_${Date.now()}.${fileExt}`;
+
+  try {
+    // 1. Upload vers le bucket 'opentasks_bucket'
+    const { error: uploadError } = await supabase.storage
+      .from('opentasks_bucket')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    // 2. Récupérer l'URL publique
+    const { data: urlData } = supabase.storage
+      .from('opentasks_bucket')
+      .getPublicUrl(filePath);
+
+    // 3. Mettre à jour la table employe
+    const updateData = {};
+    updateData[type === 'contract' ? 'contract_url' : 'medical_cert_url'] = urlData.publicUrl;
+
+    const { error: dbError } = await supabase
+      .from('employe')
+      .update(updateData)
+      .eq('userref', empId);
+
+    if (dbError) throw dbError;
+
+    // Mettre à jour l'affichage local
+    selectedEmployee.value[type === 'contract' ? 'contract_url' : 'medical_cert_url'] = urlData.publicUrl;
+    alert("Document mis à jour avec succès !");
+  } catch (err) {
+    alert("Erreur lors de l'envoi : " + err.message);
+  } finally {
+    uploadingFile.value = false;
+  }
+};
+
+// Fonction pour ouvrir le document dans un nouvel onglet
+const viewDoc = (url) => {
+  if (url) window.open(url, '_blank');
+};
 const fetchPayslips = async () => {
   try {
     const { data, error } = await supabase
@@ -622,7 +681,9 @@ onMounted(() => {
               </select>
             </td>
             <td>
-              <button class="btn-icon">📁 Dossier</button>
+              <button @click="openEmployeeFile(emp)" class="btn-icon">
+                📁 Dossier
+              </button>
             </td>
           </tr>
         </tbody>
@@ -854,6 +915,66 @@ onMounted(() => {
           </button>
       </div>
     </div>
+    <div v-if="showFileModal" class="modal-overlay" @click.self="closeFileModal">
+      <div class="employee-file-card">
+        <header class="file-header">
+          <div class="user-main">
+            <img :src="selectedEmployee.user.profilephotourl || DefaultAvatar" class="large-avatar">
+            <div>
+              <h2>{{ selectedEmployee.user.firstname }} {{ selectedEmployee.user.lastname }}</h2>
+              <span class="badge-role">{{ selectedEmployee.privilege }}</span>
+            </div>
+          </div>
+          <button @click="closeFileModal" class="btn-close">&times;</button>
+        </header>
+
+        <div class="file-content">
+          <div class="info-grid">
+            <div class="info-group">
+              <label>Informations Personnelles</label>
+              <p>📧 {{ selectedEmployee.user.email }}</p>
+              <p>📞 {{ selectedEmployee.user.phone || 'Non renseigné' }}</p>
+              <p>📍 {{ selectedEmployee.user.city }}, {{ selectedEmployee.user.country }}</p>
+            </div>
+            
+            <div class="info-group">
+              <label>Détails Professionnels</label>
+              <p><strong>Matricule:</strong> {{ selectedEmployee.empref }}</p>
+              <p><strong>Poste:</strong> {{ selectedEmployee.position }}</p>
+              <p><strong>Département:</strong> {{ selectedEmployee.deptname || 'Non assigné' }}</p>
+            </div>
+          </div>
+
+          <div class="file-actions">
+            <div class="doc-control">
+              <label>Contrat de travail</label>
+              <div class="btn-group">
+                <button v-if="selectedEmployee.contract_url" 
+                        @click="viewDoc(selectedEmployee.contract_url)" 
+                        class="btn-view">👁️ Voir</button>
+                <label class="btn-upload">
+                  {{ selectedEmployee.contract_url ? '🔄 Changer' : '📤 Charger' }}
+                  <input type="file" @change="uploadDoc($event, 'contract', selectedEmployee.userref)" hidden>
+                </label>
+              </div>
+            </div>
+
+            <div class="doc-control">
+              <label>Certificat Médical</label>
+              <div class="btn-group">
+                <button v-if="selectedEmployee.medical_cert_url" 
+                        @click="viewDoc(selectedEmployee.medical_cert_url)" 
+                        class="btn-view">👁️ Voir</button>
+                <label class="btn-upload">
+                  {{ selectedEmployee.medical_cert_url ? '🔄 Changer' : '📤 Charger' }}
+                  <input type="file" @change="uploadDoc($event, 'medical', selectedEmployee.userref)" hidden>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 </template>
 
 <style scoped>
@@ -1062,5 +1183,100 @@ onMounted(() => {
   color: #b91c1c;
   background-color: #fef2f2;
   font-weight: bold;
+}
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 1000;
+}
+
+.employee-file-card {
+  background: white;
+  width: 90%; max-width: 600px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.file-header {
+  background: #1e293b; color: white;
+  padding: 1.5rem; display: flex; justify-content: space-between; align-items: center;
+}
+
+.user-main { display: flex; align-items: center; gap: 1rem; }
+.large-avatar { width: 70px; height: 70px; border-radius: 50%; border: 3px solid #334155; object-fit: cover; }
+
+.badge-role {
+  background: #3b82f6; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;
+}
+
+.file-content { padding: 2rem; }
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+
+.info-group label {
+  display: block; font-size: 0.8rem; font-weight: bold; color: #64748b;
+  text-transform: uppercase; margin-bottom: 0.5rem; border-bottom: 1px solid #f1f5f9;
+}
+
+.info-group p { margin: 8px 0; font-size: 0.95rem; }
+
+.file-actions { display: flex; gap: 1rem; border-top: 1px solid #f1f5f9; padding-top: 1.5rem; }
+.btn-secondary {
+  flex: 1; padding: 10px; border: 1px solid #e2e8f0; background: #f8fafc;
+  border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+}
+.btn-secondary:hover { background: #f1f5f9; }
+
+.btn-close { background: transparent; border: none; color: white; font-size: 2rem; cursor: pointer; }
+.doc-control {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doc-control label {
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #64748b;
+}
+
+.btn-group {
+  display: flex;
+  gap: 5px;
+}
+
+.btn-view {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.btn-upload {
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: center;
+  transition: 0.2s;
+}
+
+.btn-upload:hover {
+  background: #e2e8f0;
+}
+
+.file-actions {
+  display: flex;
+  gap: 20px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 1.5rem;
 }
 </style>
