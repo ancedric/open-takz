@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import { Chart, registerables } from 'chart.js';
+import Header from '../components/Header.vue';
 
 Chart.register(...registerables);
 

@@ -7,6 +7,7 @@ import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router';
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
+import Header from '../components/Header.vue';
 
 const userStore = useUserStore();
 const router = useRouter();

@@ -9,6 +9,7 @@ const userStore = useUserStore();
 const router = useRouter();
 const departments = ref([])
 const excludedDepts = ['Ressources humaines', 'Comptabilité', 'Marketing', 'Finances']
+const isSidebarOpen = ref(false);
 
 onMounted(async () => {
   // Correction de l'accès au companyref selon ton store
@@ -27,6 +28,14 @@ const dynamicDepartments = computed(() => {
   return departments.value.filter(d => !excludedDepts.includes(d.deptname))
 })
 
+const toggleSidebar = () => {
+  isSidebarOpen.value = !isSidebarOpen.value;
+};
+
+router.afterEach(() => {
+  isSidebarOpen.value = false;
+});
+
 const logout = () => {
   // Logique de déconnexion ici
   router.push('/auth');
@@ -35,7 +44,9 @@ const logout = () => {
 
 <template>
   <div class="erp-container">
-    <aside class="sidebar">
+    <div v-if="isSidebarOpen" class="sidebar-overlay" @click="toggleSidebar"></div>
+
+    <aside :class="['sidebar', { 'is-open': isSidebarOpen }]">
       <div class="sidebar-header">
         <h2 class="logo">OpenTask <span>v2.0</span></h2>
       </div>
@@ -65,8 +76,13 @@ const logout = () => {
     </aside>
 
     <main class="main-content">
-      <section class="page-view">
+      <div class="header-ctn">
         <Header />
+      </div>
+      <button class="mobile-toggle" @click="toggleSidebar">
+        {{ isSidebarOpen ? '✕' : '☰' }}
+      </button>
+      <section class="page-view">
         <router-view />
       </section>
     </main>
@@ -81,7 +97,7 @@ const logout = () => {
 }
 
 .sidebar {
-  width: 260px;
+  width: 20vw;
   background-color: #1e293b;
   color: white;
   display: flex;
@@ -100,7 +116,6 @@ const logout = () => {
   flex: 1; 
   padding: 10px; 
   overflow-y: scroll; 
-  scroll-bar-width: none;
   scrollbar-width: none;
   -ms-overflow-style: none;
                         
@@ -137,21 +152,79 @@ const logout = () => {
   color: #eee;
 }
 .main-content {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  width: 80vw;
 }
 
-.top-bar {
-  height: 60px;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 30px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+.header-ctn {
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .page-view { padding: 30px; flex: 1; }
+/* --- Bouton Mobile Toggle --- */
+.mobile-toggle {
+  display: none; /* Caché sur desktop */
+  position: fixed;
+  top: 80px;
+  left: 15px;
+  z-index: 1001;
+  background: #1e293b;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* --- Overlay mobile --- */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
+/* --- Media Query pour Mobile (< 768px) --- */
+@media (max-width: 768px) {
+  .mobile-toggle {
+    display: block; /* Visible sur mobile */
+  }
+
+  .sidebar-overlay {
+    display: block; /* Activable sur mobile */
+  }
+
+  .sidebar {
+    position: fixed;
+    left: -720px; /* Cachée par défaut à gauche */
+    top: 0;
+    bottom: 0;
+    width: 80vw;
+    z-index: 1000;
+    transition: left 0.3s ease;
+    box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+  }
+
+  /* Quand la classe 'is-open' est ajoutée via le bouton */
+  .sidebar.is-open {
+    left: 0;
+  }
+
+  .main-content {
+    width: 100%;
+    /*padding-top: 50px; /* Laisser de la place pour le bouton toggle */
+  }
+
+  .page-view {
+    padding: 15px; 
+    box-sizing: border-box;
+  }
+}
 </style>

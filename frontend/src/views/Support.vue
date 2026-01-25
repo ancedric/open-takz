@@ -1,5 +1,7 @@
 <template>
-    <Header/>
+    <div class="header-ctn">
+        <Header />
+    </div>
     <div class="support">
       <div class="page-head">
         <h1>Support</h1></div>
@@ -77,7 +79,11 @@ function toggleAnswer(faq) {
       }
     }
   }
-
+.header-ctn {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
 .support h1 {
   font-size: 24px;
   margin-bottom: 10px;

@@ -603,7 +603,6 @@ const calculateTimeRemaining = (startDate, endDate) => {
 </script>
 
 <template>
-    <Header />
     <section class="project-page">
         <div class="project-sideBar">
             <form @submit.prevent="handleSearch">

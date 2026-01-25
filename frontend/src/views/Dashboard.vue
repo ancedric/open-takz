@@ -5,6 +5,7 @@ import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import { Bar } from 'vue-chartjs';
 import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js';
+import Header from '../components/Header.vue';
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
 
@@ -113,6 +114,10 @@ onMounted(() =>{
   padding-top: 60px;
   background: #f8fafc; 
   min-height: 100vh; }
+  .heade-ctn{
+    position: relative;
+    width: 100%; 
+  }
 .dash-header { margin-bottom: 2rem; }
 .dash-header h1 { color: #1e293b; margin: 0; }
 

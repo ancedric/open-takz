@@ -1,5 +1,7 @@
 <template>
-    <Header />
+    <div class="header-ctn">
+        <Header />
+    </div>
     <div class="politique-confidentialite">
       <div class="page-head"><h1>Users Conditions</h1></div>
         <router-link to="/">Home</router-link>
@@ -57,6 +59,7 @@
     border: 1px solid #ddd;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 
+    
   .page-head{
       text-align: center;
       margin-bottom: 30px;
@@ -71,6 +74,11 @@
       }
     }
 }
+.header-ctn {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
 
 .politique-confidentialite h1 {
   font-size: 24px;

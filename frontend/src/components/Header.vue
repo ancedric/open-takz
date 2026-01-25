@@ -17,8 +17,8 @@
                 <div class="account" v-show="isAccountOpen">
                     <ul>
                         <li class="user">{{ userStore.user.user.firstname }} {{ userStore.user.user.lastname }}</li>
-                        <li><router-link to="/profile" class="link">My Account</router-link></li>
-                        <li><router-link to="/usersConditions" class="link">GCU</router-link></li>
+                        <li><router-link to="/home/profile" class="link">My Account</router-link></li>
+                        <li><router-link to="/users-conditions" class="link">GCU</router-link></li>
                         <li><router-link to="/legalNotice" class="link">Legal notice</router-link></li>
                         <li><router-link to="/support" class="link">Support</router-link></li>
                         <li @click="handleLogout">Log Out</li>
@@ -46,13 +46,13 @@ const isAccountOpen = ref(false)
 
 const home = () => {
     // Redirection vers le dashboard utilisateur
-    router.push(`/project/${userStore.user.user.userref}`)
+    router.push(`/home`)
 }
 
-const handleLogout = async () => {
+const handleLogout = () => {
     try {
         // Utilise la nouvelle méthode de déconnexion de useUserStore (qui appelle supabase.auth.signOut)
-        await userStore.logout()
+        userStore.logout()
         router.push('/auth')
     } catch (error) {
         console.error('Erreur lors de la déconnexion:', error.message)
@@ -65,14 +65,10 @@ const handleLogout = async () => {
         display: flex;
         justify-content: space-between;
         gap: 100px;
-        width: 80%;
+        width: 100%;
         height: 50px;
         background-color: #fff;
         padding: 10px;
-        position: fixed;
-        z-index: 100;
-        top: 0;
-        left:260px;
         box-shadow: 0 0 10px rgba(165, 165, 165, 0.3);
 
         .title{
@@ -83,7 +79,9 @@ const handleLogout = async () => {
             padding-left: 30px;
 
             @media (max-width: 768px) {
-                width: 30%;
+                width: 60%;
+                font-size: 0.5rem;
+                padding-left: 0;
             }
 
             h1{

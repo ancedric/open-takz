@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import { downloadPaySlip } from '../services/pdfGenerator'; 
+import Header from '../components/Header.vue';
 
 const userStore = useUserStore();
 const myPayroll = ref([]);
@@ -23,6 +24,7 @@ const fetchMyData = async () => {
   loading.value = true;
   const empId = userStore.user.employe.id;
   const companyRef = userStore.user.company.companyref;
+  const userRef = userStore.user.user.userref;
 
   try {
     // 1. Paie
@@ -45,22 +47,29 @@ const fetchMyData = async () => {
     const { data: teamMemberships, error: teamErr } = await supabase
       .from('team')
       .select('projectref, role')
-      .eq('userref', userStore.user.user.ref);
+      .eq('userref', userRef);
 
     if (teamErr) throw teamErr;
 
     if (teamMemberships && teamMemberships.length > 0) {
-      // Extraire tous les projectref uniques
       const projectRefs = teamMemberships.map(t => t.projectref);
 
-      // 3.2. Récupérer les détails des projets correspondants
-      const { data: projects, error: projErr } = await supabase
+      // 2. Récupérer les projets
+      const { data: projectsData, error: projErr } = await supabase
         .from('project')
         .select('*')
-        .in('projectref', projectRefs); // Utilise 'in' pour filtrer par liste
+        .in('projectref', projectRefs);
 
       if (projErr) throw projErr;
-      myProjects.value = projects || [];
+
+      // 3. Fusionner : on ajoute le rôle correspondant à chaque projet
+      myProjects.value = projectsData.map(proj => {
+        const membership = teamMemberships.find(t => t.projectref === proj.projectref);
+        return {
+          ...proj,
+          myRole: membership ? membership.role : 'Membre'
+        };
+      });
     }
 
     // 3.3. Mes Tâches (filtrées par userref)
@@ -163,6 +172,22 @@ onMounted(() => {
             </div>
         </section>
 
+        <section class="projects-section card">
+          <h3>🏗️ Mes Projets en cours</h3>
+          <div class="project-list">
+            <div v-for="proj in myProjects" :key="proj.id" class="mini-project-card">
+              <div class="proj-header">
+                <strong>{{ proj.projectname }}</strong>
+                <span class="role-badge">{{ proj.myRole }}</span>
+              </div>
+              <div class="proj-footer">
+                <span class="status-dot" :class="proj.status"></span>
+                <small>Statut: {{ proj.status }}</small>
+              </div>
+            </div>
+            <p v-if="myProjects.length === 0" class="empty-msg">Aucun projet assigné pour le moment.</p>
+          </div>
+        </section>
         <section class="tasks-section card">
           <h3>📋 Mes Missions & Alertes</h3>
           <div class="task-list">
@@ -257,4 +282,44 @@ onMounted(() => {
 @media (max-width: 900px) {
   .portal-layout { grid-template-columns: 1fr; }
 }
+.mini-project-card {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+
+.proj-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.role-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.proj-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.actif { background: #10b981; }
+.status-dot.en_pause { background: #f59e0b; }
+.status-dot.termine { background: #64748b; }
 </style>
