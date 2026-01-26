@@ -32,7 +32,6 @@
                     </div>
 
                     <nav class="profile-nav">
-                        <router-link to="/editProfile" class="nav-link highlight">✏️ Modifier le profil</router-link>
                         <hr>
                         <router-link to="/users-conditions" class="nav-link">📄 Conditions</router-link>
                         <router-link to="/privacyPolicy" class="nav-link">🔒 Confidentialité</router-link>
@@ -48,30 +47,49 @@
                     <p>Gérez vos données de compte OpenTask</p>
                 </header>
 
-                <div v-if="userStore.user?.user" class="details-grid">
-                    <div class="detail-item">
-                        <label>Prénom</label>
-                        <p>{{data.firstName}}</p>
+                <div class="details-grid">
+                    <div class="detail-item" @click="startEdit('firstName')">
+                        <label>Prénom <span class="edit-icon">✏️</span></label>
+                        <input v-if="editingField === 'firstName'" 
+                            v-model="data.firstName" 
+                            @blur="updateField('firstName', data.firstName)"
+                            @keyup.enter="updateField('firstName', data.firstName)"
+                            autoFocus
+                            class="edit-input">
+                        <p v-else>{{data.firstName}}</p>
                     </div>
-                    <div class="detail-item">
-                        <label>Nom</label>
-                        <p>{{data.lastName}}</p>
+
+                    <div class="detail-item" @click="startEdit('lastName')">
+                        <label>Nom <span class="edit-icon">✏️</span></label>
+                        <input v-if="editingField === 'lastName'" 
+                            v-model="data.lastName" 
+                            @blur="updateField('lastName', data.lastName)"
+                            @keyup.enter="updateField('lastName', data.lastName)"
+                            autoFocus
+                            class="edit-input">
+                        <p v-else>{{data.lastName}}</p>
                     </div>
-                    <div class="detail-item">
-                        <label>Email</label>
-                        <p>{{data.email}}</p>
+
+                    <div class="detail-item" @click="startEdit('city')">
+                        <label>Ville <span class="edit-icon">✏️</span></label>
+                        <input v-if="editingField === 'city'" 
+                            v-model="data.city" 
+                            @blur="updateField('city', data.city)"
+                            @keyup.enter="updateField('city', data.city)"
+                            autoFocus
+                            class="edit-input">
+                        <p v-else>{{data.city || 'Cliquez pour ajouter'}}</p>
                     </div>
-                    <div class="detail-item">
-                        <label>Ville</label>
-                        <p>{{data.city || 'Non renseignée'}}</p>
-                    </div>
-                    <div class="detail-item">
-                        <label>Pays</label>
-                        <p>{{data.country || 'Non renseigné'}}</p>
-                    </div>
-                    <div class="detail-item">
-                        <label>Membre depuis</label>
-                        <p>{{data.createdAt.split('T')[0]}}</p>
+
+                    <div class="detail-item" @click="startEdit('country')">
+                        <label>Pays <span class="edit-icon">✏️</span></label>
+                        <input v-if="editingField === 'country'" 
+                            v-model="data.country" 
+                            @blur="updateField('country', data.country)"
+                            @keyup.enter="updateField('country', data.country)"
+                            autoFocus
+                            class="edit-input">
+                        <p v-else>{{data.country || 'Cliquez pour ajouter'}}</p>
                     </div>
                 </div>
             </main>
@@ -90,6 +108,7 @@
     const userStore = useUserStore()
 
     const fileInput = ref(null)
+    const editingField = ref(null);
     const uploading = ref(false)
     
     // 1. Déclencher le clic sur l'input masqué
@@ -142,6 +161,41 @@ const uploadProfileImage = async (event) => {
         uploading.value = false
     }
 }
+
+const updateField = async (fieldName, newValue) => {
+    const userRef = userStore.user.user.userref;
+    
+    // Éviter l'envoi si la valeur est vide ou identique
+    if (!newValue || newValue === data[fieldName]) {
+        editingField.value = null;
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('user')
+            .update({ [fieldName.toLowerCase()]: newValue }) // On s'assure que le nom correspond à la colonne SQL
+            .eq('userref', userRef);
+
+        if (error) throw error;
+
+        // Mise à jour locale du store et de l'affichage
+        userStore.user.user[fieldName.toLowerCase()] = newValue;
+        data[fieldName] = newValue;
+        
+        console.log(`${fieldName} mis à jour avec succès`);
+    } catch (err) {
+        console.error("Erreur de mise à jour:", err.message);
+        alert("Impossible de sauvegarder la modification.");
+    } finally {
+        editingField.value = null;
+    }
+};
+
+const startEdit = (fieldName) => {
+    editingField.value = fieldName;
+};
+
     // Données calculées pour le profil
 const profileData = () => {
     if (!userStore.user) return null
@@ -391,5 +445,50 @@ const data = profileData()
         grid-template-columns: 1fr;
         gap: 20px;
     }
+}
+.detail-item {
+    cursor: pointer;
+    padding: 10px;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.detail-item:hover {
+    background: #f8fafc;
+}
+
+.edit-icon {
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+    margin-left: 5px;
+}
+
+.detail-item:hover .edit-icon {
+    opacity: 1;
+}
+
+.edit-input {
+    width: 100%;
+    border: none;
+    border-bottom: 2px solid #3b82f6;
+    background: transparent;
+    padding: 8px 0;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #1e293b;
+    outline: none;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* On désactive l'édition sur les champs sensibles si besoin */
+.detail-item.readonly {
+    cursor: default;
+    background: transparent !important;
 }
 </style>

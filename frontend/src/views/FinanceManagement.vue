@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import { Chart, registerables } from 'chart.js';
@@ -16,6 +16,13 @@ let financeChart = null;
 const activeTab = ref('transactions'); // 'transactions' ou 'invoices'
 const invoices = ref([]);
 const invoiceModal = ref(false);
+const isClosing = ref(false);
+const selectedMonth = ref(new Date().toISOString().slice(0, 7)); // Ex: 2026-01
+const totalIncome = computed(() => {
+  return transactions.value
+    .filter(t => t.category === 'income' || t.category === 'budget_allocation')
+    .reduce((sum, t) => sum + t.amount, 0);
+});
 
 // Formulaire nouvelle transaction
 const showModal = ref(false);
@@ -24,6 +31,98 @@ const newTransaction = ref({
   amount: 0,
   label: '',
   category: 'expense'
+});
+
+const toast = ref({ show: false, message: '', type: 'success' });
+
+const generateMonthlyReport = computed(() => {
+  // 1. Calcul des agrégats
+  const capital = transactions.value
+    .filter(t => t.account_code?.startsWith('1'))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalRevenue = transactions.value
+    .filter(t => t.account_code?.startsWith('7'))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalExpenses = transactions.value
+    .filter(t => t.account_code?.startsWith('6'))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const netResult = totalRevenue - totalExpenses;
+  
+  // 2. Trésorerie nette (Ce qui reste en caisse/banque)
+  const cashOnHand = (capital + totalRevenue) - totalExpenses;
+
+  return {
+    capital,
+    totalRevenue,
+    totalExpenses,
+    netResult,
+    cashOnHand,
+    margin: totalRevenue > 0 ? Math.round((netResult / totalRevenue) * 100) : 0
+  };
+});
+
+const closeCurrentMonth = async () => {
+  // 1. Vérification de sécurité
+  if (transactions.value.length === 0) {
+    return showNotification("Aucune transaction à clôturer.", "error");
+  }
+
+  const confirmMsg = `Voulez-vous vraiment clôturer le mois de ${selectedMonth.value} ? Cette action est irréversible.`;
+  if (!confirm(confirmMsg)) return;
+
+  isClosing.value = true;
+
+  try {
+    // 2. Préparation de l'objet de clôture (Snapshot)
+    const closingData = {
+      companyref: userStore.user.company.companyref,
+      closing_month: selectedMonth.value,
+      total_income: totalIncome.value,
+      total_expense: totalExpense.value,
+      net_profit: balance.value,
+      closed_by: userStore.user.user.userref
+    };
+
+    // 3. Envoi à Supabase
+    const { error } = await supabase
+      .from('monthly_closings')
+      .insert([closingData]);
+
+    if (error) {
+      if (error.code === '23505') throw new Error("Ce mois est déjà clôturé.");
+      throw error;
+    }
+
+    // 4. Succès
+    showNotification(`Le mois de ${selectedMonth.value} a été sécurisé ! 🔒`);
+    
+    // On peut aussi déclencher l'impression du rapport ici
+    // window.print(); 
+
+  } catch (err) {
+    console.error("Erreur clôture:", err.message);
+    showNotification(err.message, "error");
+  } finally {
+    isClosing.value = false;
+  }
+};
+
+const showNotification = (msg, type = 'success') => {
+  toast.value = { show: true, message: msg, type };
+  // Disparition automatique après 3 secondes
+  setTimeout(() => {
+    toast.value.show = false;
+  }, 3000);
+};
+
+const netBalance = computed(() => {
+  const incomes = transactions.value
+    .filter(t => t.category === 'income' || t.category === 'budget_allocation')
+    .reduce((sum, t) => sum + t.amount, 0);
+  return incomes - totalExpenses.value;
 });
 
 const fetchData = async () => {
@@ -36,34 +135,64 @@ const fetchData = async () => {
   const { data: projData } = await supabase
     .from('project')
     .select('projectref, projectname')
-    .eq('userref', userStore.user.userref); // Ou filtre par companyref si vous l'avez ajouté
+    .eq('userref', userStore.user.user.userref); // Ou filtre par companyref si vous l'avez ajouté
   projects.value = projData;
 
   // 2. Récupérer les transactions
   const { data: transData } = await supabase
     .from('finance_transactions')
-    .select('*, project:project(projectname)')
-    .eq('companyref', userStore.user.companyref)
+    .select('*')
+    .eq('companyref', userStore.user.company.companyref)
     .order('created_at', { ascending: false });
   transactions.value = transData;
   
   loading.value = false;
 };
 
-const addTransaction = async () => {
-  const tRef = 'TRANS-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-  const { error } = await supabase
-    .from('finance_transactions')
-    .insert([{
-      ...newTransaction.value,
-      transaction_ref: tRef,
-      companyref: userStore.user.companyref,
-      created_by: userStore.user.userref
-    }]);
+const generateFinanceRef = (type = 'EXP') => {
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10).replace(/-/g, ''); // Format YYYYMMDD
+  const timePart = now.getTime().toString().slice(-4); // 4 derniers chiffres du timestamp
+  return `${type}-${datePart}-${timePart}`;
+};
 
-  if (!error) {
+const addTransaction = async () => {
+  if (newTransaction.value.amount <= 0 || !newTransaction.value.label) {
+    return showNotification("Veuillez remplir tous les champs obligatoires.", 'error');
+  }
+
+  loading.value = true;
+  // Déterminer le préfixe selon la catégorie
+  const prefix = newTransaction.value.category === 'expense' ? 'EXP' : 'BUD';
+  const tRef = generateFinanceRef(prefix);
+
+  try {
+    const { error } = await supabase
+      .from('finance_transactions')
+      .insert([{
+        transaction_ref: tRef,
+        companyref: userStore.user.company.companyref, // Structure corrigée
+        projectref: newTransaction.value.projectref || null,
+        amount: newTransaction.value.amount,
+        label: newTransaction.value.label,
+        category: newTransaction.value.category,
+        created_by: userStore.user.user.userref, // Lien vers l'employé qui saisit
+        account_code: newTransaction.value.category === 'expense' ? '601' : '101'
+      }]);
+
+    if (error) throw error;
+
     showModal.value = false;
-    fetchData();
+    // Reset du formulaire
+    newTransaction.value = { projectref: '', amount: 0, label: '', category: 'expense' };
+    await fetchData(); 
+    showNotification("Dépense enregistrée avec succès !");
+    
+  } catch (err) {
+    console.error("Erreur transaction:", err.message);
+    showNotification("Erreur lors de l'enregistrement.", 'error');
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -73,35 +202,36 @@ const totalExpenses = computed(() => {
     .reduce((sum, t) => sum + t.amount, 0);
 });
 
-const updateChart = () => {
+const updateChart = async () => {
+  await nextTick();
+  
+  if (!chartCanvas.value) {
+    console.warn("Canvas non trouvé");
+    return;
+  }
+
   if (financeChart) financeChart.destroy();
-  if (!chartCanvas.value) return;
 
-  // Calcul des données
-  const payrollTotal = transactions.value
-    .filter(t => t.transaction_ref?.startsWith('PAY-'))
-    .reduce((sum, t) => sum + t.amount, 0);
+  const totalOut = totalExpenses.value;
+  const totalIn = totalIncome.value;
 
-  const projectExpenses = transactions.value
-    .filter(t => t.category === 'expense' && !t.transaction_ref?.startsWith('PAY-'))
-    .reduce((sum, t) => sum + t.amount, 0);
+  // Si aucune donnée, on ne dessine pas ou on met des données vides
+  if (totalOut === 0 && totalIn === 0) return;
 
   financeChart = new Chart(chartCanvas.value, {
     type: 'doughnut',
     data: {
-      labels: ['Salaires (Frais Fixes)', 'Dépenses Projets'],
+      labels: ['Dépenses', 'Entrées'],
       datasets: [{
-        data: [payrollTotal, projectExpenses],
-        backgroundColor: ['#6366f1', '#ef4444'],
-        borderWidth: 0,
-        hoverOffset: 10
+        data: [totalOut, totalIn],
+        backgroundColor: ['#ef4444', '#10b981'],
+        borderWidth: 0
       }]
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { position: 'bottom' }
-      },
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom' } },
       cutout: '70%'
     }
   });
@@ -156,7 +286,7 @@ const addLine = () => {
 const fetchInvoices = async () => {
   const { data, error } = await supabase
     .from('invoices')
-    .select('*, project:project(projectname)')
+    .select('*')
     .eq('company_ref', userStore.user.companyref)
     .order('created_at', { ascending: false });
   
@@ -164,23 +294,56 @@ const fetchInvoices = async () => {
 };
 
 // Marquer comme payée (Le trigger SQL fera le reste en finance)
-const markAsPaid = async (inv) => {
-  const { error } = await supabase
-    .from('invoices')
-    .update({ status: 'paid' })
-    .eq('invoice_id', inv.invoice_id);
+const isProcessing = ref(null); // Stocke l'invoice_id en cours de paiement
 
-  if (!error) {
-    alert("Facture marquée comme payée et enregistrée en finance !");
-    fetchInvoices();
-    fetchData(); // Rafraîchit aussi les transactions
+const markAsPaid = async (inv) => {
+  if (inv.status === 'paid' || isProcessing.value === inv.invoice_id) return;
+
+  isProcessing.value = inv.invoice_id; // Active le chargement
+
+  try {
+    const paymentRef = `PAY-${inv.invoice_number}`;
+
+    // Insertion de la transaction
+    const { error: transError } = await supabase
+      .from('finance_transactions')
+      .insert([{
+        transaction_ref: paymentRef,
+        companyref: userStore.user.company.companyref,
+        projectref: inv.project_ref,
+        amount: inv.total_ttc,
+        label: `Encaissement Facture ${inv.invoice_number}`,
+        category: 'income',
+        account_code: '701'
+      }]);
+
+    if (transError && transError.code === '23505') {
+      showNotification("Cette facture a déjà été marquée comme payée.", 'error');
+    } else if (transError) throw transError;
+
+    // Update facture
+    const { error: invError } = await supabase
+      .from('invoices')
+      .update({ status: 'paid' })
+      .eq('invoice_id', inv.invoice_id);
+
+    if (invError) throw invError;
+
+    await fetchInvoices();
+    await fetchData();
+
+  } catch (err) {
+    console.error(err);
+    showNotification("Erreur lors de la mise à jour du statut de la facture.", 'error');
+  } finally {
+    isProcessing.value = null; // Désactive le chargement
   }
 };
 
 const saveInvoice = async () => {
   // 1. Validation de base
   if (!newInvoice.value.client_name || newInvoice.value.items[0].description === '') {
-    alert("Veuillez remplir au moins le nom du client et une ligne d'article.");
+    showNotification("Veuillez remplir au moins le nom du client et une ligne d'article.", 'error');
     return;
   }
 
@@ -226,7 +389,7 @@ const saveInvoice = async () => {
     if (itemsErr) throw itemsErr;
 
     // 5. Finalisation
-    alert(`Facture ${invNumber} créée avec succès !`);
+    showNotification("Facture créée avec succès !");
     invoiceModal.value = false;
     resetInvoiceForm();
     await fetchInvoices(); // Rafraîchir la liste des factures
@@ -328,17 +491,44 @@ const generateInvoicePDF = async (inv) => {
 };
 
 // On observe les transactions pour mettre à jour le graphique
-watch(transactions, () => {
-  updateChart();
-}, { deep: true });
 
-onMounted(() => {
-  fetchData();
-  fetchInvoices();
+watch(activeTab, (newTab) => {
+  if (newTab === 'transactions') {
+    updateChart();
+  }
+});
+watch(loading, (newLoading) => {
+  if (!newLoading && activeTab.value === 'transactions') {
+    // Un petit délai de 100ms suffit souvent à laisser le DOM respirer
+    setTimeout(() => {
+      updateChart();
+    }, 100);
+  }
+});
+
+onMounted(async () => {
+  await fetchData(); // Attend la fin du chargement des transactions
+  await fetchInvoices();
+  
+  // Force le rendu si on est sur le bon onglet
+  if (activeTab.value === 'transactions') {
+    await nextTick();
+    updateChart();
+  }
 });
 </script>
 
 <template>
+  <Transition name="toast">
+    <div v-if="toast.show" :class="['toast-notification', toast.type]">
+      <div class="toast-content">
+        <span v-if="toast.type === 'success'">✅</span>
+        <span v-else>⚠️</span>
+        <p>{{ toast.message }}</p>
+      </div>
+      <div class="toast-progress"></div>
+    </div>
+  </Transition>
   <div class="finance-page">
     <div class="tab-system">
       <button :class="{ active: activeTab === 'transactions' }" @click="activeTab = 'transactions'">
@@ -351,15 +541,37 @@ onMounted(() => {
     <div v-if="activeTab === 'transactions'" class="table-container">
       <div class="finance-header">
         <div class="stats-cards">
+          <div class="card balance-card">
+            <span class="label">Solde Actuel (Trésorerie)</span>
+            <span class="amount" :class="netBalance >= 0 ? 'text-green' : 'text-red'">
+              {{ netBalance.toLocaleString() }} XAF
+            </span>
+          </div>
           <div class="card total">
             <span class="label">Total Dépenses</span>
-            <span class="amount">{{ totalExpenses.toLocaleString() }} XAF</span>
+            <span class="amount text-red">{{ totalExpenses.toLocaleString() }} XAF</span>
           </div>
         </div>
         <div class="header-actions">
           <button @click="exportToCSV" class="btn-export">📥 Exporter (CSV)</button>
           <button @click="showModal = true" class="btn-primary">+ Ajouter un frais / budget</button>
         </div>
+      </div>
+      <div class="closing-action-bar">
+        <div class="info">
+          <h4>Statut de la période</h4>
+          <p v-if="!isClosing">La période est actuellement <strong>Ouverte</strong> (Modifications autorisées).</p>
+          <p v-else>Traitement de la clôture...</p>
+        </div>
+            
+        <button 
+          @click="closeCurrentMonth" 
+          class="btn-lock" 
+          :disabled="isClosing || (generateMonthlyReport && generateMonthlyReport.totalRevenue === 0)"
+        >
+          <span>{{ isClosing ? '⏳' : '🔒' }}</span>
+          Clôturer le mois définitivement
+        </button>
       </div>
       <div class="finance-overview">
         <div class="stats-cards">
@@ -379,6 +591,53 @@ onMounted(() => {
           <canvas ref="chartCanvas"></canvas>
         </div>
       </div>
+      <section class="report-section card">
+        <div class="report-header">
+          <h3>📊 Bilan de Performance Mensuel</h3>
+          <button @click="window.print()" class="btn-text">🖨️ Imprimer le rapport</button>
+        </div>
+
+        <div class="report-grid">
+          <div class="report-column">
+            <h4>Structure du Capital</h4>
+            <div class="report-row">
+              <span>Capitaux Propres (Cl. 1)</span>
+              <strong>{{ generateMonthlyReport.capital.toLocaleString() }} XAF</strong>
+            </div>
+            <div class="report-row">
+              <span>Trésorerie Disponible</span>
+              <strong class="text-green">{{ generateMonthlyReport.cashOnHand.toLocaleString() }} XAF</strong>
+            </div>
+          </div>
+
+          <div class="report-column">
+            <h4>Compte de Résultat</h4>
+            <div class="report-row">
+              <span>Chiffre d'Affaires (Cl. 7)</span>
+              <strong>+ {{ generateMonthlyReport.totalRevenue.toLocaleString() }} XAF</strong>
+            </div>
+            <div class="report-row">
+              <span>Total des Charges (Cl. 6)</span>
+              <strong class="text-red">- {{ generateMonthlyReport.totalExpenses.toLocaleString() }} XAF</strong>
+            </div>
+            <hr>
+            <div class="report-row highlight">
+              <span>RÉSULTAT NET</span>
+              <strong :class="generateMonthlyReport.netResult >= 0 ? 'text-green' : 'text-red'">
+                {{ generateMonthlyReport.netResult.toLocaleString() }} XAF
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="report-footer">
+          <div class="kpi-box">
+            <span>Marge Net</span>
+            <strong>{{ generateMonthlyReport.margin }} %</strong>
+          </div>
+          <p class="disclaimer">Document généré automatiquement par OpenTask Finance - Conforme principes OHADA.</p>
+        </div>
+      </section>
       <div class="table-container">
         <h3>Historique des Transactions</h3>
         <table class="finance-table">
@@ -463,7 +722,16 @@ onMounted(() => {
               <span :class="['badge', inv.status]">{{ inv.status }}</span>
             </td>
             <td>
-              <button v-if="inv.status !== 'paid'" @click="markAsPaid(inv)" class="btn-icon">✅ Payer</button>
+              <button 
+                v-if="inv.status !== 'paid'" 
+                @click="markAsPaid(inv)" 
+                class="btn-icon btn-pay"
+                :disabled="isProcessing === inv.invoice_id"
+              >
+                <span v-if="isProcessing === inv.invoice_id" class="loader-mini"></span>
+                <span v-else>✅ Payer</span>
+              </button>
+              
               <button @click="generateInvoicePDF(inv)" class="btn-icon">🖨️ PDF</button>
             </td>
           </tr>
@@ -475,7 +743,7 @@ onMounted(() => {
       <div class="modal invoice-modal">
         <h3>Nouvelle Facture</h3>
         <input v-model="newInvoice.client_name" placeholder="Nom du Client" class="input">
-         
+        
         <div class="items-list">
           <div v-for="(item, index) in newInvoice.items" :key="index" class="item-row">
             <input v-model="item.description" placeholder="Désignation" class="input flex-2">
@@ -499,6 +767,79 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Conteneur principal */
+.toast-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  min-width: 300px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  padding: 16px;
+  z-index: 9999;
+  border-left: 5px solid #10b981; /* Vert par défaut */
+  overflow: hidden;
+}
+
+.toast-notification.error {
+  border-left-color: #ef4444;
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toast-content p {
+  margin: 0;
+  color: #1e293b;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+/* Barre de progression qui s'écoule */
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  background: #f1f5f9;
+}
+
+.toast-progress::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  background: #10b981;
+  animation: progress 3s linear forwards;
+}
+
+.toast-notification.error .toast-progress::after {
+  background: #ef4444;
+}
+
+@keyframes progress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* Animations Vue (Transition) */
+.toast-enter-active {
+  animation: toast-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.toast-leave-active {
+  animation: toast-in 0.3s reverse ease-in;
+}
+
+@keyframes toast-in {
+  from { transform: translateX(120%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
   .tab-system {
   display: flex;
   gap: 5px;
@@ -600,5 +941,165 @@ onMounted(() => {
   background: #f8fafc;
   border-color: #cbd5e1;
   color: #1e293b;
+}
+.btn-pay {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  padding: 6px 12px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-pay:hover:not(:disabled) {
+  background-color: #bbf7d0;
+}
+
+.btn-pay:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+/* Petit Spinner Animé */
+.loader-mini {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #166534;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Style spécifique pour les boutons icônes */
+.btn-icon {
+  margin-right: 5px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 500;
+}
+.report-section {
+  background: #fff;
+  padding: 2rem;
+  margin-top: 30px;
+  border-top: 4px solid #1e293b;
+}
+
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+.report-column h4 {
+  color: #64748b;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 5px;
+}
+
+.report-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 0.95rem;
+}
+
+.report-row.highlight {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin-top: 10px;
+}
+
+.report-footer {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px dashed #cbd5e1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kpi-box {
+  background: #f8fafc;
+  padding: 10px 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.kpi-box span { display: block; font-size: 0.7rem; color: #64748b; }
+
+.disclaimer { font-size: 0.75rem; color: #94a3b8; font-style: italic; }
+
+@media print {
+  body * { visibility: hidden; }
+  .report-section, .report-section * { visibility: visible; }
+  .report-section { position: absolute; left: 0; top: 0; width: 100%; border: none; }
+  .btn-text { display: none; }
+}
+.closing-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff4e5; /* Couleur d'avertissement douce */
+  border: 1px solid #ffcc91;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin: 2rem 0;
+}
+
+.closing-action-bar .info h4 {
+  margin: 0;
+  color: #854d0e;
+  font-size: 1rem;
+}
+
+.closing-action-bar .info p {
+  margin: 5px 0 0;
+  font-size: 0.85rem;
+  color: #a16207;
+}
+
+.btn-lock {
+  background: #1e293b;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s;
+}
+
+.btn-lock:hover:not(:disabled) {
+  background: #000;
+  transform: scale(1.02);
+}
+
+.btn-lock:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

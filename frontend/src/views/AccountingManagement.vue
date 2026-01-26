@@ -9,6 +9,28 @@ const loading = ref(true);
 const transactions = ref([]);
 const filterType = ref('all'); // all, income, expense
 const showManualForm = ref(false);
+const selectedMonth = ref(new Date().toISOString().slice(0,7));
+const balance = computed(() => {
+  const totalCashIn = transactions.value
+    .filter(t => t.account_code?.startsWith('1') || t.account_code?.startsWith('7'))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalCashOut = transactions.value
+    .filter(t => t.account_code?.startsWith('6'))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  return totalCashIn - totalCashOut;
+});
+const totalIncome = computed(() => {
+  return transactions.value
+    .filter(t => t.category === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+});
+const totalExpense = computed(() => {
+  return transactions.value
+    .filter(t => t.category === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+});
 const newEntry = ref({
   label: '',
   amount: 0,
@@ -17,29 +39,34 @@ const newEntry = ref({
 
 // Liste OHADA simplifiée pour le Cameroun
 const ohadaCommonCodes = [
+  { code: '101', label: 'Capital social' },
+  { code: '164', label: 'Emprunts et dettes financières' },
+  { code: '421', label: 'Personnel - Salaires à payer' },
   { code: '601', label: 'Achats de fournitures' },
   { code: '605', label: 'Électricité, Eau' },
   { code: '611', label: 'Transports et Déplacements' },
   { code: '622', label: 'Loyers et charges' },
   { code: '625', label: 'Internet et Téléphone' },
   { code: '632', label: 'Impôts et Taxes' },
-  { code: '701', label: 'Ventes (Revenus divers)' }
+  { code: '645', label: 'Charges sociales' },
+  { code: '701', label: 'Ventes' },
 ];
 
 // Récupération des données
 const fetchAccountingData = async () => {
-  if (!userStore.user?.companyref) return;
+  if (!userStore.user.company.companyref) return;
   
   loading.value = true;
   try {
     const { data, error } = await supabase
       .from('finance_transactions')
-      .select('*, project:project(projectname)')
-      .eq('companyref', userStore.user.companyref)
+      .select('*')
+      .eq('companyref', userStore.user.company.companyref)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) console.error(error.message);
     transactions.value = data;
+    console.log("Données comptables chargées:", data);
   } catch (err) {
     console.error("Erreur comptable:", err.message);
   } finally {
@@ -47,32 +74,70 @@ const fetchAccountingData = async () => {
   }
 };
 
-const submitEntry = async () => {
-  if (newEntry.value.amount <= 0) return alert("Montant invalide");
+const burnRateAnalysis = computed(() => {
+  const initialCapital = massAnalysis.value.capital;
+  const totalExpenses = massAnalysis.value.charges;
   
+  // Calcul du pourcentage consommé
+  const consumptionPercentage = initialCapital > 0 
+    ? Math.min(Math.round((totalExpenses / initialCapital) * 100), 100) 
+    : 0;
+
+  // Estimation de la "Runway" (combien de mois il reste si on continue ainsi)
+  // On prend la moyenne des dépenses (ici simplifié sur les données chargées)
+  const monthlyAverageExpense = totalExpenses / (transactions.value.length > 0 ? 1 : 1); 
+  const remainingCash = balance.value;
+  const runwayMonths = monthlyAverageExpense > 0 ? Math.floor(remainingCash / monthlyAverageExpense) : '∞';
+
+  return {
+    percentage: consumptionPercentage,
+    runway: runwayMonths,
+    isCritical: consumptionPercentage > 80
+  };
+});
+
+const submitEntry = async () => {
+  if (newEntry.value.amount <= 0 || !newEntry.value.label) {
+    return alert("Veuillez remplir correctement le libellé et le montant.");
+  }
+  
+  // Logique automatique de catégorie selon le plan OHADA
+  let finalCategory = 'expense';
+  if (newEntry.value.account_code.startsWith('7') || newEntry.value.account_code.startsWith('1')) {
+    finalCategory = 'income';
+  }
+
   const { error } = await supabase.from('finance_transactions').insert([{
-    companyref: userStore.user.employe.companyref,
+    transaction_ref: `FIN-${Date.now()}`,
+    companyref: userStore.user.company.companyref,
     amount: newEntry.value.amount,
     label: newEntry.value.label,
-    category: newEntry.value.account_code.startsWith('7') ? 'income' : 'expense',
-    account_code: newEntry.value.account_code
+    category: finalCategory,
+    account_code: newEntry.value.account_code,
+    created_at: new Date()
   }]);
 
   if (!error) {
+    // Reset et rafraîchissement
     showManualForm.value = false;
     newEntry.value = { label: '', amount: 0, account_code: '601' };
-    fetchAccountingData();
+    await fetchAccountingData();
+  } else {
+    alert("Erreur lors de l'enregistrement : " + error.message);
   }
 };
 
 // Fonction pour regrouper les transactions par Classe OHADA (le premier chiffre du code)
 const transactionsByClass = computed(() => {
   const groups = {
+    'Classe 1 (Capitaux)': 0,
     'Classe 6 (Charges)': 0,
     'Classe 7 (Produits)': 0
   };
 
   transactions.value.forEach(t => {
+    // Correction : Ajout de la Classe 1 et des autres
+    if (t.account_code?.startsWith('1')) groups['Classe 1 (Capitaux)'] += t.amount;
     if (t.account_code?.startsWith('6')) groups['Classe 6 (Charges)'] += t.amount;
     if (t.account_code?.startsWith('7')) groups['Classe 7 (Produits)'] += t.amount;
   });
@@ -110,7 +175,7 @@ const performMonthlyClosing = async () => {
 
     alert(`Le mois de ${selectedMonth.value} a été clôturé avec succès !`);
     
-    // Optionnel : Générer un PDF ou imprimer le rapport ici
+    // Générer un PDF ou imprimer le rapport ici
     window.print(); 
 
   } catch (err) {
@@ -142,9 +207,28 @@ const accountingAnalysis = computed(() => {
 });
 
 const netResult = computed(() => {
-  const income = transactions.value.filter(t => t.category === 'income').reduce((s, t) => s + t.amount, 0);
-  const expense = transactions.value.filter(t => t.category === 'expense').reduce((s, t) => s + t.amount, 0);
-  return income - expense;
+  const products = transactions.value
+    .filter(t => t.account_code?.startsWith('7'))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const charges = transactions.value
+    .filter(t => t.account_code?.startsWith('6'))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  return products - charges;
+});
+
+const massAnalysis = computed(() => {
+  return {
+    capital: transactions.value.filter(t => t.account_code?.startsWith('1')).reduce((s, t) => s + t.amount, 0),
+    charges: transactions.value.filter(t => t.account_code?.startsWith('6')).reduce((s, t) => s + t.amount, 0),
+    produits: transactions.value.filter(t => t.account_code?.startsWith('7')).reduce((s, t) => s + t.amount, 0)
+  };
+});
+
+const filteredTransactions = computed(() => {
+  if (filterType.value === 'all') return transactions.value;
+  return transactions.value.filter(t => t.category === filterType.value);
 });
 
 onMounted(fetchAccountingData);
@@ -174,20 +258,51 @@ onMounted(fetchAccountingData);
       </button>
     </div>
     <div class="stats-grid">
-      <div class="stat-card balance">
-        <span class="label">Solde Total</span>
-        <h2 :class="{ 'positive': balance >= 0, 'negative': balance < 0 }">
-          {{ balance }} €
+      <div class="stat-card treasury">
+        <span class="label">Trésorerie Disponible (Cash)</span>
+        <h2 :class="balance >= 0 ? 'text-success' : 'text-danger'">
+          {{ balance.toLocaleString() }} XAF
         </h2>
+        <small>Inclut Capital (Classe 1) + Ventes</small>
       </div>
-      <div class="stat-card income">
-        <span class="label">Total Revenus</span>
-        <h2>+ {{ totalIncome }} €</h2>
+      
+      <div class="stat-card result">
+        <span class="label">Résultat d'Exploitation</span>
+        <h2 :class="netResult >= 0 ? 'text-success' : 'text-danger'">
+          {{ netResult.toLocaleString() }} XAF
+        </h2>
+        <small>Produits (Cl. 7) - Charges (Cl. 6)</small>
       </div>
-      <div class="stat-card expense">
-        <span class="label">Total Dépenses</span>
-        <h2>- {{ totalExpense }} €</h2>
+
+      <div class="stat-card capital">
+        <span class="label">Capitaux Propres</span>
+        <h2>{{ massAnalysis.capital.toLocaleString() }} XAF</h2>
+        <small>Investissements initiaux (Cl. 1)</small>
       </div>
+    </div>
+    <div class="burn-rate-section card" v-if="massAnalysis.capital > 0">
+      <div class="burn-header">
+        <h3>🔥 Analyse de Survie (Burn Rate)</h3>
+        <span class="runway-badge">Autonomie estimée : {{ burnRateAnalysis.runway }} mois</span>
+      </div>
+      
+      <div class="progress-container">
+        <div class="progress-bar">
+          <div 
+            class="progress-fill" 
+            :style="{ width: burnRateAnalysis.percentage + '%' }"
+            :class="{ 'critical': burnRateAnalysis.isCritical }"
+          ></div>
+        </div>
+        <div class="progress-labels">
+          <span>Capital consommé : {{ burnRateAnalysis.percentage }}%</span>
+          <span>Total Charges : {{ massAnalysis.charges.toLocaleString() }} XAF</span>
+        </div>
+      </div>
+      
+      <p v-if="burnRateAnalysis.isCritical" class="warning-msg">
+        ⚠️ Attention : Vous avez consommé plus de 80% de votre capital initial.
+      </p>
     </div>
     <div class="accounting-grid">
       <div class="p-l-statement card">
@@ -233,25 +348,47 @@ onMounted(fetchAccountingData);
         </button>
       </div>
 
-      <div v-if="showManualForm" class="quick-form card">
-        <div class="form-grid">
-          <div class="input-group">
-            <label>Libellé de l'opération</label>
-            <input v-model="newEntry.label" placeholder="ex: Facture Eneo Décembre">
+        <div v-if="showManualForm" class="quick-form-container">
+        <div class="form-card">
+          <div class="form-header">
+            <h3>➕ Nouvelle Écriture Comptable</h3>
+            <p>Système OHADA - Enregistrement en base de données</p>
           </div>
-          <div class="input-group">
-            <label>Montant (XAF)</label>
-            <input type="number" v-model="newEntry.amount">
+          
+          <div class="form-body">
+            <div class="input-row">
+              <div class="input-group full">
+                <label>Libellé de l'opération</label>
+                <input v-model="newEntry.label" placeholder="ex: Apport en capital initial" class="custom-input">
+              </div>
+            </div>
+
+            <div class="input-row split">
+              <div class="input-group">
+                <label>Montant (XAF)</label>
+                <div class="amount-wrapper">
+                  <input type="number" v-model="newEntry.amount" placeholder="0" class="custom-input amount">
+                  <span class="currency-label">XAF</span>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label>Compte OHADA</label>
+                <select v-model="newEntry.account_code" class="custom-select">
+                  <option v-for="c in ohadaCommonCodes" :key="c.code" :value="c.code">
+                    {{ c.code }} - {{ c.label }}
+                  </option>
+                </select>
+              </div>
+            </div>
           </div>
-          <div class="input-group">
-            <label>Compte OHADA</label>
-            <select v-model="newEntry.account_code">
-              <option v-for="c in ohadaCommonCodes" :key="c.code" :value="c.code">
-                {{ c.code }} - {{ c.label }}
-              </option>
-            </select>
+
+          <div class="form-footer">
+            <button @click="showManualForm = false" class="btn-cancel">Annuler</button>
+            <button @click="submitEntry" class="btn-save" :disabled="loading">
+              {{ loading ? 'Enregistrement...' : 'Valider l\'écriture' }}
+            </button>
           </div>
-          <button @click="submitEntry" class="btn-save">Enregistrer</button>
         </div>
       </div>
       <div v-if="loading" class="loader"><Spinner /></div>
@@ -356,5 +493,221 @@ onMounted(fetchAccountingData);
 @media print {
   .btn-close-month, .filters, .action-bar { display: none; }
   .card { border: 1px solid #eee; box-shadow: none; }
+}
+
+.burn-rate-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 12px;
+}
+
+.burn-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.runway-badge {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 0.85rem;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 12px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #3b82f6;
+  transition: width 0.5s ease-in-out;
+}
+
+.progress-fill.critical {
+  background: #ef4444;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.warning-msg {
+  color: #ef4444;
+  font-size: 0.85rem;
+  margin-top: 10px;
+  font-weight: bold;
+}
+/* Conteneur et Animation */
+.quick-form-container {
+    margin-top: 1.5rem;
+    margin-bottom: 2rem;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.form-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+/* Header du formulaire */
+.form-header {
+    padding: 1.25rem 1.5rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.form-header h3 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 1.1rem;
+}
+
+.form-header p {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+/* Corps du formulaire */
+.form-body {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.input-row {
+    display: flex;
+    gap: 1.25rem;
+}
+
+.input-row.split > div {
+    flex: 1;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.input-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #475569;
+}
+
+/* Inputs personnalisés */
+.custom-input, .custom-select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    background-color: #fff;
+    color: #1e293b;
+}
+
+.custom-input:focus, .custom-select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Gestion du montant avec label monnaie */
+.amount-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.amount-wrapper .amount {
+    padding-right: 50px;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.currency-label {
+    position: absolute;
+    right: 12px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #94a3b8;
+}
+
+/* Footer et Boutons */
+.form-footer {
+    padding: 1.25rem 1.5rem;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+.btn-cancel {
+    background: white;
+    border: 1px solid #cbd5e1;
+    padding: 10px 20px;
+    border-radius: 8px;
+    color: #64748b;
+    cursor: pointer;
+    font-weight: 500;
+    transition: 0.2s;
+}
+
+.btn-cancel:hover {
+    background: #f1f5f9;
+    color: #1e293b;
+}
+
+.btn-save {
+    background: #1e293b;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.btn-save:hover:not(:disabled) {
+    background: #334155;
+    transform: translateY(-1px);
+}
+
+.btn-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .input-row.split {
+        flex-direction: column;
+    }
 }
 </style>

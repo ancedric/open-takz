@@ -20,40 +20,57 @@ const stats = ref({
 });
 
 const loading = ref(true);
+const recentTransactions = ref([]);
+const totalUnpaid = ref(0);
 
 const loadDashboardData = async () => {
   if (!userStore.user) return;
   loading.value = true;
   
-  // Utiliser la référence employe pour la cohérence
   const companyRef = userStore.user.employe.companyref;
 
-  // 1. Appels parallélisés pour plus de performance
-  const [empRes, projRes, cliRes, transRes, invRes] = await Promise.all([
-    supabase.from('employe').select('*', { count: 'exact', head: true }).eq('companyref', companyRef),
-    supabase.from('project').select('*', { count: 'exact', head: true }).eq('companyref', companyRef), // Filtré par entreprise
-    supabase.from('client').select('*', { count: 'exact', head: true }).eq('companyref_owner', companyRef),
-    supabase.from('finance_transactions').select('amount, category').eq('companyref', companyRef),
-    supabase.from('invoices').select('total_ttc').eq('company_ref', companyRef).eq('status', 'paid')
-  ]);
+  try {
+    const [empRes, projRes, cliRes, transRes, recentRes, invPendingRes] = await Promise.all([
+      supabase.from('employe').select('*', { count: 'exact', head: true }).eq('companyref', companyRef),
+      supabase.from('project').select('*', { count: 'exact', head: true }).eq('companyref', companyRef),
+      supabase.from('client').select('*', { count: 'exact', head: true }).eq('companyref_owner', companyRef),
+      supabase.from('finance_transactions').select('*').eq('companyref', companyRef),
+      // On récupère les 5 dernières transactions avec le nom du projet
+      supabase.from('finance_transactions')
+        .select('*')
+        .eq('companyref', companyRef)
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase.from('invoices').select('total_ttc').eq('company_ref', companyRef).neq('status', 'paid')
 
-  // 2. Calculs Financiers
-  // Chiffre d'Affaires = Factures encaissées
-  const revenue = invRes.data?.reduce((s, t) => s + t.total_ttc, 0) || 0;
-  
-  // Dépenses = Toutes les catégories 'expense' (inclut désormais les salaires via le trigger)
-  const expenses = transRes.data?.filter(t => t.category === 'expense').reduce((s, t) => s + t.amount, 0) || 0;
+    ]);
 
-  stats.value = {
-    employees: empRes.count || 0,
-    projects: projRes.count || 0,
-    clients: cliRes.count || 0,
-    totalRevenue: revenue,
-    totalExpenses: expenses,
-    netProfit: revenue - expenses
-  };
+    totalUnpaid.value = invPendingRes.data?.reduce((s, t) => s + t.total_ttc, 0) || 0;
+    // Calculs financiers
+    const revenue = transRes.data
+      ?.filter(t => t.category === 'income' || t.category === 'budget_allocation')
+      .reduce((s, t) => s + t.amount, 0) || 0;
+    
+    const expenses = transRes.data
+      ?.filter(t => t.category === 'expense')
+      .reduce((s, t) => s + t.amount, 0) || 0;
 
-  loading.value = false;
+    stats.value = {
+      employees: empRes.count || 0,
+      projects: projRes.count || 0,
+      clients: cliRes.count || 0,
+      totalRevenue: revenue,
+      totalExpenses: expenses,
+      netProfit: revenue - expenses
+    };
+
+    recentTransactions.value = recentRes.data || [];
+
+  } catch (error) {
+    console.error("Erreur Dashboard:", error);
+  } finally {
+    loading.value = false;
+  }
 };
 
 // Données pour le graphique Finance
@@ -67,10 +84,15 @@ const chartData = computed(() => ({
   }]
 }));
 
-onMounted(() =>{
-  if(userStore.user.user.privilege !== 'owner' && userStore.user.user.privilege !== 'admin' && userStore.user.user.privilege !== 'hr') {
-    router.push('/home/employe')}
-  loadDashboardData
+// IMPORTANT : Correction du onMounted (il manquait les parenthèses pour appeler la fonction)
+onMounted(() => {
+  if (userStore.user.user.privilege !== 'owner' && 
+      userStore.user.user.privilege !== 'admin' && 
+      userStore.user.user.privilege !== 'hr') {
+    router.push('/home/employe');
+  } else {
+    loadDashboardData(); // <-- Parenthèses ajoutées ici
+  }
 });
 </script>
 
@@ -81,11 +103,17 @@ onMounted(() =>{
         <span class="icon">{{ stats.netProfit >= 0 ? '📈' : '📉' }}</span>
         <div class="info">
           <span class="label">Bénéfice Net</span>
-          <span class="value">{{ stats.netProfit }} XAF</span>
+          <span class="value">{{ (stats.netProfit || 0).toLocaleString() }} XAF</span>
         </div>
       </div>
     </div>
-
+    <div class="stat-card warning" v-if="totalUnpaid > 0">
+      <span class="icon">⚠️</span>
+      <div class="info">
+        <span class="label">Paiements en attente</span>
+        <span class="value text-red">{{ totalUnpaid.toLocaleString() }} XAF</span>
+      </div>
+    </div>
     <div class="dash-content">
       <div class="chart-container card">
         <div class="card-header">
@@ -102,6 +130,41 @@ onMounted(() =>{
           <router-link to="/home/finance" class="q-link">🧾 Créer une facture</router-link>
           <router-link to="/home/finance" class="q-link">📊 Voir la trésorerie</router-link>
           <router-link to="/home/archives" class="q-link report-link">📂 Rapports & Archives</router-link>
+        </div>
+      </div>
+    </div>
+    <div class="recent-transactions card">
+      <div class="card-header">
+        <h3>Flux de trésorerie récents</h3>
+        <router-link to="/home/finance" class="view-all">Voir tout</router-link>
+      </div>
+      
+      <div class="table-responsive">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>Désignation</th>
+              <th>Projet</th>
+              <th>Montant</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in recentTransactions" :key="t.id">
+              <td>
+                <div class="t-info">
+                  <span class="t-label">{{ t.label }}</span>
+                  <span class="t-date">{{ new Date(t.created_at).toLocaleDateString() }}</span>
+                </div>
+              </td>
+              <td class="t-project">{{ t.project?.projectname || '---' }}</td>
+              <td :class="t.category === 'expense' ? 'text-red' : 'text-green'">
+                {{ t.category === 'expense' ? '-' : '+' }}{{ t.amount.toLocaleString() }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="recentTransactions.length === 0" class="empty-state">
+          Aucune transaction récente.
         </div>
       </div>
     </div>
@@ -178,5 +241,51 @@ onMounted(() =>{
 .q-link.report-link:hover {
   background: #334155;
   transform: scale(1.02);
+}
+
+.recent-transactions {
+  margin-top: 1.5rem;
+}
+
+.view-all {
+  font-size: 0.8rem;
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.dash-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  color: #64748b;
+  padding: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dash-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #f8fafc;
+  font-size: 0.85rem;
+}
+
+.t-info { display: flex; flex-direction: column; }
+.t-label { font-weight: 500; color: #1e293b; }
+.t-date { font-size: 0.7rem; color: #94a3b8; }
+.t-project { color: #64748b; font-size: 0.8rem; }
+
+.text-red { color: #ef4444; font-weight: 600; }
+.text-green { color: #10b981; font-weight: 600; }
+
+.empty-state {
+  text-align: center;
+  padding: 20px;
+  color: #94a3b8;
+  font-style: italic;
 }
 </style>

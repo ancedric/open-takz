@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import supabase from '../services/supabaseConfig';
 import downloadPaySlip from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
@@ -7,7 +7,6 @@ import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router';
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
-import Header from '../components/Header.vue';
 
 const userStore = useUserStore();
 const router = useRouter();
@@ -44,6 +43,44 @@ const pendingLeaves = ref([]);
 const attendanceToday = ref([]);
 const allEmployees = ref([]);
 const monthlySummary = ref([]);
+const showPayConfirmModal = ref(false);
+const processingEmp = ref(null);
+const paySummary = ref({});
+const showPayModal = ref(false);
+const payDetails = ref(null);
+
+const upcomingPayments = computed(() => {
+  const today = new Date().getDate();
+  return employees.value.filter(emp => {
+    const payDay = parseInt(emp.paymentday);
+    if (!payDay) return false;
+    
+    // Si la paie est entre aujourd'hui et J+5
+    const diff = payDay - today;
+    return diff >= 0 && diff <= 5;
+  });
+});
+
+const openPayModal = (employee) => {
+  const summary = monthlySummary.value.find(s => s.name === employee.user.firstname + ' ' + employee.user.lastname);
+  const theoreticalDays = 22;
+  const actualDays = summary ? (summary.presentDays + summary.leaveDays) : theoreticalDays;
+  const missedDays = Math.max(0, theoreticalDays - actualDays);
+  const dailyRate = employee.salary / theoreticalDays;
+  const absenceDeduction = Math.round(dailyRate * missedDays);
+  const adjustedBrut = employee.salary - absenceDeduction;
+  const socialCharges = calculateCNPS(adjustedBrut);
+
+  payDetails.value = {
+    employee,
+    missedDays,
+    absenceDeduction,
+    adjustedBrut,
+    socialCharges,
+    net: adjustedBrut - socialCharges
+  };
+  showPayModal.value = true;
+};
 
 // 1. SÉCURITÉ : Vérification des accès
 const checkAccess = () => {
@@ -145,7 +182,7 @@ const handlePayAll = async () => {
     if (error) throw error;
 
     alert("Paiements validés avec succès !");
-    await fetchPayslips(); // Rafraîchir la liste
+    await fetchPayslips(); 
   } catch (err) {
     console.error("Erreur lors de la validation des paiements:", err);
     alert("Une erreur est survenue.");
@@ -164,16 +201,38 @@ const calculateCNPS = (baseSalary) => {
   return Math.round(assiette * TAUX_SALARIAL);
 };
 
+const preparePayroll = (employee) => {
+  const summary = monthlySummary.value.find(s => s.name === `${employee.user.firstname} ${employee.user.lastname}`);
+  const theoreticalDays = 22;
+  const actualDays = summary ? (summary.presentDays + summary.leaveDays) : theoreticalDays;
+  const missedDays = Math.max(0, theoreticalDays - actualDays);
+  const absenceDeduction = Math.round((employee.salary / theoreticalDays) * missedDays);
+  const adjustedBrut = employee.salary - absenceDeduction;
+  const socialCharges = calculateCNPS(adjustedBrut);
+
+  paySummary.value = {
+    employee,
+    missedDays,
+    absenceDeduction,
+    adjustedBrut,
+    socialCharges,
+    netToPay: adjustedBrut - socialCharges
+  };
+  
+  processingEmp.value = employee;
+  showPayConfirmModal.value = true;
+};
+
 const validatePayroll = async (employee) => {
   // 0. Vérification anti-doublon
   const isAlreadyPaid = await checkExistingPayroll(employee.id, selectedMonth.value);
   if (isAlreadyPaid) {
-    alert(`La paie de ${employee.name} pour ${selectedMonth.value} a déjà été validée.`);
+    alert(`La paie de ${employee.user.firstname} ${employee.user.lastname} pour ${selectedMonth.value} a déjà été validée.`);
     return;
   }
 
   // 1. Récupérer le bilan d'assiduité
-  const summary = monthlySummary.value.find(s => s.name === employee.name);
+  const summary = monthlySummary.value.find(s => s.name === employee.user.firstname + ' ' + employee.user.lastname);
   
   // --- CALCUL DU TEMPS ---
   const theoreticalDays = 22;
@@ -181,9 +240,9 @@ const validatePayroll = async (employee) => {
   const missedDays = Math.max(0, theoreticalDays - actualDays);
 
   // --- CALCUL DU BRUT APRÈS ABSENCES ---
-  const dailyRate = employee.base_salary / theoreticalDays;
+  const dailyRate = employee.salary / theoreticalDays;
   const absenceDeduction = Math.round(dailyRate * missedDays);
-  const adjustedBrut = employee.base_salary - absenceDeduction;
+  const adjustedBrut = employee.salary - absenceDeduction;
 
   // --- CALCUL DES CHARGES SOCIALES (CNPS) ---
   const socialCharges = calculateCNPS(adjustedBrut);
@@ -194,13 +253,13 @@ const validatePayroll = async (employee) => {
   const finalNet = adjustedBrut - socialCharges;
 
   // 3. Dialogue de confirmation détaillé (Pratique pour le RH)
-  const confirmMsg = `SYNTHÈSE DE PAIE : ${employee.name}\n` +
+  const confirmMsg = `SYNTHÈSE DE PAIE : ${employee.user.firstname} ${employee.user.lastname}\n` +
     `-----------------------------------\n` +
     `Période : ${selectedMonth.value}\n` +
     `Jours Absence : ${missedDays} j\n` +
     `Retenue : -${Math.round(absenceDeduction).toLocaleString()} XAF\n
     -----------------------------------------
-    Salaire de Base : ${employee.base_salary.toLocaleString()} XAF
+    Salaire de Base : ${employee.salary.toLocaleString()} XAF
     Retenue Absence (${missedDays}j) : -${absenceDeduction.toLocaleString()} XAF
     -----------------------------------------
     BRUT TAXABLE : ${adjustedBrut.toLocaleString()} XAF
@@ -220,9 +279,9 @@ const validatePayroll = async (employee) => {
     .insert([{
       employee_id: employee.id,
       companyref: userStore.user.employe.companyref,
-      employee_name: employee.name,
+      employee_name: employee.user.firstname + ' ' + employee.user.lastname,
       month: selectedMonth.value,
-      base_salary: employee.base_salary,
+      base_salary: employee.salary,
       net_salary: Math.round(finalNet),
       absences_count: missedDays,
       absence_deduction: absenceDeduction,
@@ -291,7 +350,6 @@ const fetchData = async () => {
     if (empError) throw empError;
 
     employees.value = empData;
-    console.log(employees.value)
 
     await fetchPayslips()
   } catch (err) {
@@ -498,7 +556,7 @@ const fetchMonthlySummary = async () => {
     const empLeaves = leaves?.filter(l => l.employee_id === emp.id) || [];
     
     return {
-      name: emp.name,
+      name: emp.user.firstname + ' ' + emp.user.lastname,
       presentDays: empAtt.filter(a => a.status === 'present' || a.status === 'retard').length,
       lateCount: empAtt.filter(a => a.status === 'retard').length,
       leaveDays: empLeaves.reduce((acc, curr) => acc + curr.duration_days, 0),
@@ -622,7 +680,7 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="emp in employees" :key="emp.empref">
+            <tr v-for="emp in upcomingPayments" :key="emp.empref">
               <td>{{ emp.user.firstname }} {{ emp.user.lastname }}</td>
               <td>{{ emp.salary }} XAF</td>
               <td>
@@ -976,6 +1034,26 @@ onMounted(() => {
         </div>
       </div>
     </div>
+    <div v-if="showPayModal" class="modal-overlay">
+      <div class="pay-confirmation-card">
+        <h3>Confirmer la Paie - {{ selectedMonth }}</h3>
+        <div class="pay-body">
+          <div class="pay-row"><span>Salaire de base</span> <span>{{ payDetails.employee.salary.toLocaleString() }} XAF</span></div>
+          <div class="pay-row text-red"><span>Absences ({{ payDetails.missedDays }}j)</span> <span>-{{ payDetails.absenceDeduction.toLocaleString() }} XAF</span></div>
+          <hr>
+          <div class="pay-row"><span>Brut Taxable</span> <span>{{ payDetails.adjustedBrut.toLocaleString() }} XAF</span></div>
+          <div class="pay-row text-red"><span>Retenue CNPS (4,2%)</span> <span>-{{ payDetails.socialCharges.toLocaleString() }} XAF</span></div>
+          <div class="pay-total">
+            <span>NET À PAYER</span>
+            <span>{{ payDetails.net.toLocaleString() }} XAF</span>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button @click="showPayModal = false" class="btn-cancel">Annuler</button>
+          <button @click="confirmAndRecordPay" class="btn-confirm">✅ Enregistrer & Payer</button>
+        </div>
+      </div>
+    </div>
 </template>
 
 <style scoped>
@@ -1280,4 +1358,21 @@ onMounted(() => {
   border-top: 1px solid #f1f5f9;
   padding-top: 1.5rem;
 }
+.pay-confirmation-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 16px;
+  width: 450px;
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+}
+.pay-body { margin: 20px 0; }
+.pay-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+.pay-total { 
+  display: flex; justify-content: space-between; 
+  margin-top: 15px; padding-top: 15px; border-top: 2px solid #f1f5f9;
+  font-weight: 800; font-size: 1.2rem; color: #166534;
+}
+.modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn-confirm { background: #22c55e; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+.btn-cancel { background: #f1f5f9; color: #64748b; border: none; padding: 12px; border-radius: 8px; cursor: pointer; }
 </style>

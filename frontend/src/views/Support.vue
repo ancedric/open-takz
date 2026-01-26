@@ -5,7 +5,6 @@
     <div class="support">
       <div class="page-head">
         <h1>Support</h1></div>
-        <router-link to="/">Home</router-link>
       <p>Besoin d'aide ? Nous sommes là pour vous aider !</p>
       <div class="support-options">
         <div class="support-option">
