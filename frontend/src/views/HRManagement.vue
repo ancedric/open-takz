@@ -8,6 +8,16 @@ import { useRouter } from 'vue-router';
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 
+
+const toast = ref({ show: false, message: '', type: 'success' });
+
+  function triggerToast(message, type = 'success') {
+      toast.value = { show: true, message, type };
+      setTimeout(() => {
+          toast.value.show = false;
+      }, 4000); // Disparaît après 4 secondes
+  };
+
 const userStore = useUserStore();
 const router = useRouter();
 
@@ -30,7 +40,7 @@ const companyRef = ref(userStore.user.company.companyref)
 const position = ref('');
 const salary = ref('');
 const paymentDay = ref('')
-const privilege = ref('employe');
+const privilege = ref('employee');
 const legalForm = ref(''); // Récupéré depuis l'objet company
 const companyData = ref(null);
 const isProcessing = ref(false);
@@ -48,6 +58,9 @@ const processingEmp = ref(null);
 const paySummary = ref({});
 const showPayModal = ref(false);
 const payDetails = ref(null);
+const applications = ref([]);
+const uploadProgress = ref(0);
+const selectedFile = ref(null);
 
 const upcomingPayments = computed(() => {
   const today = new Date().getDate();
@@ -82,11 +95,19 @@ const openPayModal = (employee) => {
   showPayModal.value = true;
 };
 
+const newJob = ref({
+    title: '',
+    type: 'recrutement',
+    description: '',
+    location: '',
+    deadline: ''
+});
+
 // 1. SÉCURITÉ : Vérification des accès
 const checkAccess = () => {
   const role = userStore.user.employe.privilege;
   if (role !== 'owner' && role !== 'hr') {
-    alert("Accès refusé : Vous n'avez pas les droits RH.");
+    alert("Accès refusé : Vous n'avez pas les droits RH.", "error");
     router.push('/home');
   }
 };
@@ -135,9 +156,9 @@ const uploadDoc = async (event, type, empId) => {
 
     // Mettre à jour l'affichage local
     selectedEmployee.value[type === 'contract' ? 'contract_url' : 'medical_cert_url'] = urlData.publicUrl;
-    alert("Document mis à jour avec succès !");
+    alert("Document mis à jour avec succès !", "success");
   } catch (err) {
-    alert("Erreur lors de l'envoi : " + err.message);
+    aleret("Erreur lors de l'envoi : " + err.message, "error");
   } finally {
     uploadingFile.value = false;
   }
@@ -168,6 +189,21 @@ const fetchPayslips = async () => {
   }
 };
 
+// Récupérer les candidatures
+const fetchApplications = async () => {
+    const { data, error } = await supabase
+        .from('applications')
+        .select('*, job:jobref(title)')
+        .order('applied_at', { ascending: false });
+
+    if (error) {
+      console.error("Erreur applications:", error);
+      applications.value = [];
+    }
+    applications.value = data;
+
+};
+
 const handlePayAll = async () => {
   if (!confirm("Voulez-vous marquer tous les bulletins de ce mois comme 'Payés' ?")) return;
   
@@ -181,11 +217,11 @@ const handlePayAll = async () => {
 
     if (error) throw error;
 
-    alert("Paiements validés avec succès !");
+    alert("Paiements validés avec succès !", "success");
     await fetchPayslips(); 
   } catch (err) {
     console.error("Erreur lors de la validation des paiements:", err);
-    alert("Une erreur est survenue.");
+    alert("Une erreur est survenue.", "error");
   } finally {
     isProcessingPayment.value = false;
   }
@@ -227,7 +263,7 @@ const validatePayroll = async (employee) => {
   // 0. Vérification anti-doublon
   const isAlreadyPaid = await checkExistingPayroll(employee.id, selectedMonth.value);
   if (isAlreadyPaid) {
-    alert(`La paie de ${employee.user.firstname} ${employee.user.lastname} pour ${selectedMonth.value} a déjà été validée.`);
+    alert(`La paie de ${employee.user.firstname} ${employee.user.lastname} pour ${selectedMonth.value} a déjà été validée.`, "error");
     return;
   }
 
@@ -289,11 +325,11 @@ const validatePayroll = async (employee) => {
     }]);
 
   if (!error) {
-    alert("Succès : Bulletin archivé et flux financier créé.");
+    alert("Succès : Bulletin archivé et flux financier créé.", "success");
     // Optionnel : rafraîchir la liste pour griser le bouton valider
     fetchMonthlySummary(); 
   } else {
-    alert("Erreur lors de la validation : " + error.message);
+    alert("Erreur lors de la validation : " + error.message, "error");
   }
 };
 
@@ -434,36 +470,164 @@ const handleSearchUser = async (email) => {
           .select('*')
           .eq('userref', data[0].userref)
 
-          console.log(emplData)
           if(emplError) console.log('employé non trouvé')
           else{
             userResult.value = [{user:data[0], employe:emplData[0]}]
-            console.log('user result: ', userResult.value)}}
+          }
+      }
   } catch(err){
     console.error("Une erreur s'est produite lors de la recherche de l'utilisateur", err)
   }
 }
-const handleAddEmploye = async () =>{
-  try{
-    const userRef = userResult.value
-    console.log(userRef)
-    const {data, error} = await supabase
-      .from('employe')
-      .update([{
-        companyref: companyRef.value,
-        position: position.value,
-        salary: salary.value,
-        paymentday: paymentDay.value,
-        privilege: privilege.value
-      }])
-      .eq('userref', userRef[0].user.userref)
 
-      if(error) throw error
-      openEmpForm.value = false
-  } catch(err){
-    console.error("Une erreur s'est produite lors de l'ajout de l'employé", err)
-  }
-}
+const updateAppStatus = async (application, newStatus) => {
+    try {
+      console.log(application, 'statut:', newStatus)
+        // 1. Mise à jour du statut dans la table 'applications'
+        const { data, error } = await supabase
+            .from('applications')
+            .update({ status: newStatus })
+            .eq('appref', application.appref);
+
+        if (error) {
+          console.log(error);
+          throw error;
+        }
+        // 2. Si le RH a cliqué sur "Accepter"
+        if (newStatus === 'accepted') {
+            userResult.value = [{
+                user: {
+                    userref: application.candidate_ref,
+                    firstname: application.firstname,
+                    lastname: application.lastname,
+                    email: application.email
+                },
+                employe: { userref: application.candidate_ref }
+            }];
+            openEmpForm.value = true;
+        } else {
+            triggerToast(`Candidature ${newStatus}`, "info");
+            fetchApplications(); 
+        }
+    } catch (err) {
+        triggerToast("Erreur lors du changement de statut", "error");
+    }
+};
+
+const handleAddEmploye = async () => {
+    if (!salary.value || !position.value) {
+        triggerToast("Veuillez remplir tous les champs", "error");
+        return;
+    }
+
+    isCreatingEmp.value = true;
+    try {
+      const cleanSalary = Number(salary.value.toString().replace(/\s+/g, ''));
+
+      if (isNaN(cleanSalary)) {
+        triggerToast("Le salaire doit être un nombre valide", "error");
+        return;
+      }
+        // Accès aux données selon TA structure : userResult.value[0].user
+        const selectedUser = userResult.value[0].user; 
+        const userRef = selectedUser.userref;
+
+        // 1. Mise à jour de la fiche employe existante
+        const { error: empError } = await supabase
+            .from('employe')
+            .update({
+                companyref: userStore.user.company.companyref,
+                position: position.value,
+                salary: cleanSalary,
+                paymentday: paymentDay.value,
+                privilege: privilege.value,
+                hired_at: new Date().toISOString()
+            })
+            .eq('userref', userRef);
+
+        if (empError) throw empError;
+
+        // 2. Génération et Sauvegarde du contrat
+        const doc = new jsPDF();
+        const date = new Date().toLocaleDateString();
+
+        // --- Ton Design de Contrat ---
+        doc.setFontSize(20);
+        doc.text("CONTRAT DE TRAVAIL", 105, 20, { align: "center" });
+        doc.setFontSize(12);
+        doc.text(`L'employeur : ${userStore.user.company.companyname}`, 20, 65);
+        doc.text(`Le salarié : ${selectedUser.firstname} ${selectedUser.lastname}`, 20, 75);
+        doc.text(`Poste : ${position.value} | Salaire : ${salary.value} XAF`, 20, 105);
+        // -----------------------------
+
+        // SAUVEGARDE SUR SUPABASE STORAGE
+        const pdfBlob = doc.output('blob');
+        const fileName = `contrat_${userRef}_${Date.now()}.pdf`;
+        const filePath = `${userStore.user.company.companyref}/${fileName}`;
+
+        const { error: storageError } = await supabase.storage
+            .from('contracts')
+            .upload(filePath, pdfBlob, { contentType: 'application/pdf' });
+
+        if (storageError) throw storageError;
+
+        // Enregistrement de l'URL dans la table employe
+        const { data: urlData, error } = supabase.storage.from('contracts').getPublicUrl(filePath);
+        await supabase
+            .from('employe')
+            .update({ contract_url: urlData.publicUrl })
+            .eq('userref', userRef);
+            
+            if (error) {
+              console.log(error);
+              throw error;
+            }
+        // 3. Téléchargement local pour le RH
+        doc.save(fileName);
+
+        openEmpForm.value = false;
+        triggerToast("Candidat recruté et contrat archivé !", "success");
+        
+        if (typeof fetchApplications === 'function') fetchApplications();
+
+    } catch (err) {
+        console.error("Erreur recrutement:", err);
+        triggerToast("Erreur lors de la validation", "error");
+    } finally {
+        isCreatingEmp.value = false;
+    }
+};
+
+const generateAndSaveContract = async (candidate) => {
+    const doc = new jsPDF();
+    // ... (Ton code de design du contrat ici) ...
+    doc.text(`CONTRAT DE TRAVAIL : ${candidate.firstname} ${candidate.lastname}`, 20, 20);
+    // ...
+
+    // Conversion en Blob pour Supabase
+    const pdfBlob = doc.output('blob');
+    const fileName = `contrat_${candidate.userref}_${Date.now()}.pdf`;
+    const filePath = `${userStore.user.company.companyref}/${fileName}`;
+
+    // Upload vers le bucket 'contracts'
+    const { data, error } = await supabase.storage
+        .from('contracts')
+        .upload(filePath, pdfBlob, { contentType: 'application/pdf' });
+
+    if (error) throw error;
+
+    // Optionnel : Enregistrer l'URL du contrat dans la table employe
+    const { data: urlData } = supabase.storage.from('contracts').getPublicUrl(filePath);
+    
+    await supabase
+        .from('employe')
+        .update({ contract_url: urlData.publicUrl })
+        .eq('userref', candidate.userref);
+
+    doc.save(fileName); // Téléchargement local pour le RH
+    return urlData.publicUrl;
+};
+
 // 2. FONCTION : Créer un département
 const handleCreateDept = async () => {
   if (!newDeptName.value.trim()) return;
@@ -484,6 +648,7 @@ const handleCreateDept = async () => {
     await fetchData(); // Actualise la liste et les menus déroulants
   }
   isCreatingDept.value = false;
+  triggerToast("Département créé avec succès!", "success")
 };
 
 // 3. ACTIONS : Mise à jour employés
@@ -493,7 +658,118 @@ const updateRole = async (userRef, newRole) => {
 
 const updateDept = async (userRef, deptRef) => {
   await supabase.from('employe').update({ deptref: deptRef }).eq('userref', userRef);
+  if(deptRef) {
+    const dept = departments.value.find(d => d.deptref === deptRef);
+    triggerToast(`L'employé a été affecté au département : ${dept.deptname}`, "success");
+  }
 }; 
+
+const updateManager = async (deptRef, newManagerRef) => {
+  try {
+    const { error } = await supabase
+      .from('department')
+      .update({ manager_ref: newManagerRef })
+      .eq('deptref', deptRef);
+
+    if (error) throw error;
+    
+    // Notification de succès optionnelle
+    console.log("Responsable mis à jour avec succès");
+  } catch (err) {
+    console.error("Erreur lors de la mise à jour du responsable:", err);
+    alert("Impossible de modifier le responsable.", "error");
+    // Optionnel : recharger fetchData() pour annuler visuellement le changement en cas d'erreur
+    await fetchData();
+  }
+};
+
+// Capturer le fichier lors de la sélection
+const handleFileUpload = (event) => {
+    selectedFile.value = event.target.files[0];
+};
+
+// Fonction principale pour uploader vers Supabase Storage
+const uploadToStorage = async (file) => {
+    try {
+        // Validation basique avant l'envoi
+        if (file.size > 5 * 1024 * 1024) { // Limite à 5Mo
+            throw new Error("Le fichier est trop volumineux (max 5Mo)");
+        }
+
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+        const filePath = `announcements/${fileName}`;
+
+        const { data, error } = await supabase.storage
+            .from('recruitment')
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (error) {
+            // Ici, l'erreur vient souvent du Bucket (nom mal orthographié ou pas public)
+            throw error;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+            .from('recruitment')
+            .getPublicUrl(filePath);
+
+        return publicUrlData.publicUrl;
+    } catch (error) {
+        // On remonte l'erreur pour qu'elle soit captée par publishAnnounce
+        throw error; 
+    }
+};
+// Mise à jour de la fonction de publication
+const publishAnnounce = async () => {
+    try {
+        let fileUrl = null;
+
+        if (selectedFile.value) {
+            
+            fileUrl = await uploadToStorage(selectedFile.value);
+            
+            if (!fileUrl) throw new Error("Impossible de générer l'URL du fichier");
+        }
+
+        const jobRef = 'JOB-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+        
+        const { error: dbError } = await supabase.from('jobs').insert({
+            jobref: jobRef,
+            title: newJob.value.title,
+            description: newJob.value.description,
+            type: newJob.value.type,
+            location: newJob.value.location,
+            deadline: newJob.value.deadline,
+            file_url: fileUrl, 
+            companyref: userStore.user.company.companyref,
+            created_by: userStore.user.user.userref
+        });
+
+        if (dbError) throw dbError;
+
+        triggerToast("L'annonce a été publiée avec succès !", "success");
+        resetForm();
+
+    } catch (err) {
+        // C'est ici qu'on t'informe du problème réel
+        console.error("Détails de l'erreur:", err);
+        triggerToast(`Erreur : ${err.message || "Problème lors de la publication"}`, "error");
+    }
+};
+
+const resetForm = () => {
+    newJob.value = {
+        title: '',
+        type: 'recrutement',
+        description: '',
+        location: '',
+        deadline: ''
+    };
+    selectedFile.value = null;
+}
 
 const fetchAttendanceAndLeaves = async () => {
   const companyRef = userStore.user.employe.companyref;
@@ -524,8 +800,8 @@ const updateLeaveStatus = async (id, newStatus) => {
     .eq('id', id);
 
   if (!error) {
-    alert(`Demande ${newStatus} avec succès`);
-    fetchAttendanceAndLeaves(); // Rafraîchir la liste
+    alert(`Demande ${newStatus} avec succès`, "success");
+    fetchAttendanceAndLeaves(); 
   }
 };
 
@@ -567,18 +843,11 @@ const fetchMonthlySummary = async () => {
 watch(filterType, (newVal) => {
   if (newVal === 'attendances') {
     fetchAttendanceAndLeaves();
-    fetchMonthlySummary();
   }
-});
-// Appeler cette fonction quand filterType devient 'attendances'
-watch(filterType, (newVal) => {
-  if (newVal === 'attendances') fetchAttendanceAndLeaves();
-});
-watch(filterType, (newVal) => {
   if (newVal === 'salaries') fetchPayslips();
+    fetchMonthlySummary();
+    fetchApplications();
 });
-
-
 
 onMounted(() => {
   checkAccess();
@@ -587,11 +856,20 @@ onMounted(() => {
 </script>
 
 <template>
+  <transition name="toast-fade">
+    <div v-if="toast.show" :class="['toast-popup', toast.type]">
+        <div class="toast-content">
+            <img v-if="toast.type === 'success'" src="../assets/icons/checked.png" class="icon">
+            <p>{{ toast.message }}</p>
+        </div>
+        <div class="progress-bar"></div>
+    </div>
+  </transition>
   <div class="hr-page">
     <div class="hr-card">
       <div class="header">
-        <h2>👥 Gestion RH - {{ userStore.user.company.companyname }}</h2>
-        <button @click="fetchData" class="btn-refresh">🔄</button>
+        <h2><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> Gestion RH - {{ userStore.user.company.companyname }}</h2>
+        <button @click="fetchData" class="btn-refresh"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
       </div>
       <div class="table-controls">
         <div class="filters">
@@ -599,6 +877,7 @@ onMounted(() => {
           <button :class="{ active: filterType === 'departments' }" @click="filterType = 'departments'">Departements</button>
           <button :class="{ active: filterType === 'salaries' }" @click="filterType = 'salaries'">Salaires</button>
           <button :class="{ active: filterType === 'attendances' }" @click="filterType = 'attendances'">Présences</button>
+          <button :class="{ active: filterType === 'recruitment' }" @click="filterType = 'recruitment'">Recrutement</button>
         </div>
       </div>
       
@@ -617,7 +896,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="dept-creation-zone" v-if="userResult">
+      <div class="dept-creation-zone" v-if="userResult && filterType==='employees'">
         <table class="emp-table">
           <thead>
             <tr>
@@ -651,7 +930,7 @@ onMounted(() => {
         </table>
       </div>
 
-      <div class="dept-creation-zone" v-if="filterType === 'departments'"">
+      <div class="dept-creation-zone" v-show="filterType === 'departments'">
         <h4>Ajouter un nouveau département</h4>
         <div class="dept-form">
           <input 
@@ -665,7 +944,7 @@ onMounted(() => {
           </button>
         </div>
       </div>
-      <div class="payroll-action-card">
+      <div class="payroll-action-card" v-show="filterType === 'salaries' && upcomingPayments.length > 0">
         <div class="month-selector">
           <label>Période de paie :</label>
           <input type="text" v-model="selectedMonth" placeholder="Ex: Janvier 2026">
@@ -689,7 +968,7 @@ onMounted(() => {
                   class="btn-validate"
                   :disabled="isProcessing"
                 >
-                  ✅ Valider la paie
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Valider la paie
                 </button>
               </td>
             </tr>
@@ -730,7 +1009,7 @@ onMounted(() => {
               <select 
                 v-model="emp.privilege" 
                 @change="updateRole(emp.userref, emp.privilege)"
-                :disabled="emp.userref === userStore.user.user.userref"
+                :disabled="emp.userref === userStore.user.user.userref || emp.privilege === 'owner'"
                 class="table-select"
               >
                 <option value="user">Employé</option>
@@ -741,13 +1020,13 @@ onMounted(() => {
             </td>
             <td>
               <button @click="openEmployeeFile(emp)" class="btn-icon">
-                📁 Dossier
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Dossier
               </button>
             </td>
           </tr>
         </tbody>
       </table>
-      <table v-else-if="filterType ==='departments'" class="emp-table">
+      <table v-show="filterType ==='departments'" class="emp-table">
         <thead>
           <tr>
             <th>Département</th>
@@ -766,9 +1045,16 @@ onMounted(() => {
             </td>
             <td>  
               <div class="user-info">
-                <div>
-                  <div class="name">{{ employees.filter(emp => emp.userref === dpt.manager_ref)[0].user.firstname }} {{ employees.filter(emp => emp.userref === dpt.manager_ref)[0].user.lastname }}</div>
-                </div>
+                <select 
+                  v-model="dpt.manager_ref" 
+                  @change="updateManager(dpt.deptref, dpt.manager_ref)"
+                  class="table-select manager-select"
+                >
+                  <option value="" disabled>Sélectionner un responsable</option>
+                  <option v-for="emp in employees" :key="emp.user.userref" :value="emp.user.userref">
+                    {{ emp.user.firstname }} {{ emp.user.lastname }}
+                  </option>
+                </select>
               </div>
             </td>
             <td>
@@ -777,7 +1063,7 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
-      <div v-if="filterType === 'salaries'" class="salary-actions">
+      <div v-show="filterType === 'salaries'" class="salary-actions">
         <div class="stats-mini">
           <span>Total à payer : <strong>{{ payslips.reduce((acc, s) => acc + s.net_salary, 0).toLocaleString() }} XAF</strong></span>
         </div>
@@ -785,15 +1071,15 @@ onMounted(() => {
           @click="handlePayAll" 
           :disabled="isProcessingPayment || payslips.filter(s => s.status === 'draft').length === 0"
           class="btn-pay-all"
-        >
-          {{ isProcessingPayment ? 'Traitement...' : '✅ Tout marquer comme payé' }}
+        ><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          {{ isProcessingPayment ? 'Traitement...' : 'Tout marquer comme payé' }}
         </button>
         
         <button @click="downloadPaySlip(report)" class="btn-download">
-          📄 Télécharger Bulletin
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> Télécharger Bulletin
         </button>
       </div>
-      <table v-else-if="filterType === 'salaries'" class="emp-table">
+      <table v-show="filterType === 'salaries'" class="emp-table">
         <thead>
           <tr>
             <th>Collaborateur</th>
@@ -818,7 +1104,7 @@ onMounted(() => {
               <span :class="'status-badge ' + slip.status">{{ slip.status }}</span>
             </td>
             <td>
-              <button @click="downloadPDF(slip)" class="btn-icon">📥 PDF</button>
+              <button @click="downloadPDF(slip)" class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 10 12 13 9 10"></polyline><line x1="12" y1="3" x2="12" y2="13"></line><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg> PDF</button>
             </td>
           </tr>
         </tbody>
@@ -830,10 +1116,10 @@ onMounted(() => {
         </div>
 
         <section class="attendance-today">
-          <h3>📊 Présences du jour ({{ new Date().toLocaleDateString() }})</h3>
+          <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg> Présences du jour ({{ new Date().toLocaleDateString() }})</h3>
           <section class="monthly-overview card">
             <div class="section-header">
-              <h3>📈 Récapitulatif Mensuel ({{ selectedMonth }})</h3>
+              <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg> Récapitulatif Mensuel ({{ selectedMonth }})</h3>
               <small>Calculé automatiquement pour la préparation de la paie</small>
             </div>
 
@@ -865,7 +1151,7 @@ onMounted(() => {
                     </td>
                     <td :class="{ 'warning-row': item.lateCount >= 3 }">
                       {{ item.lateCount }}
-                      <span v-if="item.lateCount >= 3" title="Seuil de discipline atteint">⚠️</span>
+                      <span v-if="item.lateCount >= 3" title="Seuil de discipline atteint">⚠️<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
                     </td>
                   </tr>
                 </tbody>
@@ -922,6 +1208,125 @@ onMounted(() => {
         </section>
 
       </div>
+      <div class="recruitment-module" v-show="filterType === 'recruitment'">
+        <div class="main-ctn announce-form-section">
+            <div class="proj-header">
+                <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg> Publier une annonce</h3>
+                <p>Recrutement ou Événement d'entreprise</p>
+            </div>
+            
+            <form @submit.prevent="publishAnnounce" class="announce-form">
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Titre de l'annonce</label>
+                        <input type="text" v-model="newJob.title" placeholder="Ex: Développeur Fullstack" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Type d'annonce</label>
+                        <select v-model="newJob.type">
+                            <option value="recrutement">Recrutement</option>
+                            <option value="evenement">Événement</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Description détaillée</label>
+                    <textarea v-model="newJob.description" placeholder="Missions, profil recherché, détails de l'événement..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Lieu</label>
+                        <input type="text" v-model="newJob.location" placeholder="Ex: Douala, Hybride...">
+                    </div>
+                    <div class="input-group">
+                        <label>Date limite / Date de l'événement</label>
+                        <input type="date" v-model="newJob.deadline">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                  <label>Document descriptif (Optionnel - PDF/Image)</label>
+                  <input type="file" @change="handleFileUpload" accept=".pdf,.jpg,.png,.docx" class="file-input">
+                  <progress v-if="uploadProgress > 0" :value="uploadProgress" max="100"></progress>
+                </div>
+                <div class="btn-ctn">
+                    <button type="submit" class="btn-add">Publier l'annonce</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="main-ctn applications-section">
+            <div class="proj-header">
+                <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> Candidatures & Réponses</h3>
+            </div>
+
+            <div class="table-container">
+                <table class="emp-table">
+                    <thead>
+                        <tr>
+                            <th>Candidat</th>
+                            <th>Poste visé</th>
+                            <th>Date</th>
+                            <th>CV / Document</th>
+                            <th>Statut</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="app in applications" :key="app.appref">
+                            <td>
+                              <div class="user-info">
+                                <div>
+                                  <div class="name">{{ app.firstname }} {{ app.lastname }}</div>
+                                  <div class="email">{{ app.email }}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="user-info">  
+                                <div>
+                                  <div class="name">{{ app.job?.title }}</div>
+                                </div>
+                              </div></td>
+                            <td> 
+                              <div class="user-info">
+                                <div>
+                                  <div class="name">{{ new Date(app.applied_at).toLocaleDateString() }}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div v-if="app.resume_url" class="user-info">
+                                <div>
+                                  <div class="name"><a  :href="app.resume_url" target="_blank" class="btn-view"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> Voir le CV</a> </div>
+                                </div>
+                                
+                              </div>
+                              <div v-else class="user-info">
+                                <div class="name" x>Aucun document</div>
+                              </div>
+                            </td>
+                            <td>
+                                <span :class="['status-badge', app.status]">{{ app.status }}</span>
+                            </td>
+                            <td>
+                                <select @change="updateAppStatus(app, $event.target.value)" class="status-select" :disabled="(app.status === 'accepted' || app.status === 'rejected') && userStore.user.employe.privilege !== 'owner'">
+                                    <option value="pending">En attente</option>
+                                    <option value="accepted">Accepter</option>
+                                    <option value="rejected">Refuser</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr v-if="applications.length === 0">
+                            <td colspan="6" class="text-center">Aucune candidature reçue pour le moment.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="recruit" v-if="openEmpForm">
@@ -932,7 +1337,7 @@ onMounted(() => {
         <div class="dept-form">
           <label>Type de contrat</label>
           <select v-model="privilege" class="dept-input">
-            <option value="user">Salarié Standard</option>
+            <option value="employee">Salarié Standard</option>
             <option value="admin">chef de Département</option>
             <option value="hr">RH Manager</option>
             <option value="owner">Dirigeant / Associé</option>
@@ -966,7 +1371,7 @@ onMounted(() => {
           <span>Salaire Net estimé : {{ (salary * 0.75).toLocaleString() }} XAF</span><br>
           <span>Coût Total Entreprise : {{ (salary * 1.45).toLocaleString() }} XAF</span>
         </div>
-          <button @click="handleAddEmploye" :disabled="isCreatingEmp" class="btn-add">
+          <button @click="handleAddEmploye()" :disabled="isCreatingEmp" class="btn-add">
             {{ isCreatingEmp ? '...' : '+ Recruter' }}
           </button>
           <button @click="openEmpForm = false" class="btn-close">
@@ -991,16 +1396,16 @@ onMounted(() => {
           <div class="info-grid">
             <div class="info-group">
               <label>Informations Personnelles</label>
-              <p>📧 {{ selectedEmployee.user.email }}</p>
-              <p>📞 {{ selectedEmployee.user.phone || 'Non renseigné' }}</p>
-              <p>📍 {{ selectedEmployee.user.city }}, {{ selectedEmployee.user.country }}</p>
+              <p><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"></path></svg> {{ selectedEmployee.user.email }}</p>
+              <p><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> {{ selectedEmployee.user.phone || 'Non renseigné' }}</p>
+              <p><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> {{ selectedEmployee.user.city }}, {{ selectedEmployee.user.country }}</p>
             </div>
             
             <div class="info-group">
               <label>Détails Professionnels</label>
               <p><strong>Matricule:</strong> {{ selectedEmployee.empref }}</p>
               <p><strong>Poste:</strong> {{ selectedEmployee.position }}</p>
-              <p><strong>Département:</strong> {{ selectedEmployee.deptname || 'Non assigné' }}</p>
+              <p><strong>Département:</strong> {{ departments.filter(d => d.deptref=== selectedEmployee.deptref)[0]?.deptname || 'Non assigné' }}</p>
             </div>
           </div>
 
@@ -1010,9 +1415,10 @@ onMounted(() => {
               <div class="btn-group">
                 <button v-if="selectedEmployee.contract_url" 
                         @click="viewDoc(selectedEmployee.contract_url)" 
-                        class="btn-view">👁️ Voir</button>
+                        class="btn-view"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> Voir</button>
                 <label class="btn-upload">
-                  {{ selectedEmployee.contract_url ? '🔄 Changer' : '📤 Charger' }}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 10 12 13 9 10"></polyline><line x1="12" y1="3" x2="12" y2="13"></line><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg>
+                  {{ selectedEmployee.contract_url ? 'Changer' : 'Charger' }}
                   <input type="file" @change="uploadDoc($event, 'contract', selectedEmployee.userref)" hidden>
                 </label>
               </div>
@@ -1025,7 +1431,8 @@ onMounted(() => {
                         @click="viewDoc(selectedEmployee.medical_cert_url)" 
                         class="btn-view">👁️ Voir</button>
                 <label class="btn-upload">
-                  {{ selectedEmployee.medical_cert_url ? '🔄 Changer' : '📤 Charger' }}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 10 12 13 9 10"></polyline><line x1="12" y1="3" x2="12" y2="13"></line><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg>
+                  {{ selectedEmployee.medical_cert_url ? ' Changer' : 'Charger' }}
                   <input type="file" @change="uploadDoc($event, 'medical', selectedEmployee.userref)" hidden>
                 </label>
               </div>
@@ -1050,7 +1457,7 @@ onMounted(() => {
         </div>
         <div class="modal-actions">
           <button @click="showPayModal = false" class="btn-cancel">Annuler</button>
-          <button @click="confirmAndRecordPay" class="btn-confirm">✅ Enregistrer & Payer</button>
+          <button @click="confirmAndRecordPay" class="btn-confirm"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Enregistrer & Payer</button>
         </div>
       </div>
     </div>
@@ -1063,6 +1470,7 @@ onMounted(() => {
 }
 .hr-card { background: white; border-radius: 15px; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
 .header { display: flex; justify-content: space-between; margin-bottom: 2rem; }
+.header button {height: 2rem; width: 2rem;}
 
 .filters { display: flex; gap: 10px; margin-bottom: 1.5rem; }
 .filters button { 
@@ -1078,35 +1486,37 @@ onMounted(() => {
   padding: 1rem;
   border-radius: 10px;
   margin-bottom: 1rem;
+
+  .stats-mini {
+    color: #475569;
+    font-size: 0.95rem;
+  }
+
+  .btn-pay-all {
+    background: #059669;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-pay-all:hover:not(:disabled) {
+    background: #047857;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.2);
+  }
+
+  .btn-pay-all:disabled {
+    background: #cbd5e1;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
 }
 
-.stats-mini {
-  color: #475569;
-  font-size: 0.95rem;
-}
 
-.btn-pay-all {
-  background: #059669; /* Vert émeraude */
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-pay-all:hover:not(:disabled) {
-  background: #047857;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.2);
-}
-
-.btn-pay-all:disabled {
-  background: #cbd5e1;
-  cursor: not-allowed;
-  opacity: 0.7;
-}
 
 .status-badge {
   padding: 4px 8px;
@@ -1122,18 +1532,139 @@ onMounted(() => {
   color: #2563eb;
 }
 
-.recruit{
-  position: absolute;
-  top: 50%;
-  left: 60%;
-  transform: translate( -50%, -50%);
-  background-color: #eee;
-  border-radius: 12px;
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.3);
-  width: 60%;
-  height: 60%;
-  padding: 20px;
+/* L'overlay qui couvre tout l'écran */
+.recruit {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999; /* Au-dessus de tout */
+    padding: 20px;
+
+    /* La boîte modale elle-même */
+    .emp-creation-zone {
+        background: #ffffff;
+        width: 100%;
+        max-width: 550px;
+        max-height: 90vh; /* Ne dépasse jamais l'écran */
+        overflow-y: auto; /* Scroll interne si nécessaire */
+        border-radius: 16px;
+        padding: 30px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        position: relative;
+        animation: modalIn 0.3s ease-out;
+    }
+
+    @keyframes modalIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* En-tête de la modale */
+    .emp-creation-zone h4 {
+        color: #004581;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 5px;
+    }
+
+    .emp-creation-zone h3 {
+        font-size: 1.6rem;
+        color: #1e293b;
+        margin: 0;
+    }
+
+    .emp-creation-zone p {
+        color: #64748b;
+        font-size: 0.9rem;
+        margin-bottom: 25px;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 15px;
+    }
+
+    /* Formulaire */
+    .dept-form {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+
+    .dept-form label {
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: #475569;
+    }
+
+    .dept-input {
+        padding: 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: border-color 0.2s;
+    }
+
+    .dept-input:focus {
+        border-color: #004581;
+        outline: none;
+    }
+
+    /* Zone de calcul */
+    .payroll-preview {
+        background: #f1f5f9;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 25px;
+        font-size: 0.9rem;
+    }
+
+    .payroll-preview strong {
+        color: #004581;
+    }
+
+    /* Boutons */
+    .btn-add {
+        width: 100%;
+        background: #004581;
+        color: white;
+        border: none;
+        padding: 15px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 1rem;
+        cursor: pointer;
+        margin-bottom: 10px;
+        transition: opacity 0.2s;
+    }
+
+    .btn-add:hover {
+        opacity: 0.9;
+    }
+
+    .btn-close {
+        width: 100%;
+        background: #f1f5f9;
+        color: #64748b;
+        border: none;
+        padding: 12px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-close:hover {
+        background: #e2e8f0;
+    }
 }
+
+
 .dept-creation-zone { 
   background: #f8fafc; 
   padding: 1rem; 
@@ -1144,6 +1675,7 @@ onMounted(() => {
 .payroll-action-card {
   background: white;
   padding: 1.5rem;
+  margin: 1.5rem 0;
   border-radius: 15px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
@@ -1375,4 +1907,177 @@ onMounted(() => {
 .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .btn-confirm { background: #22c55e; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; }
 .btn-cancel { background: #f1f5f9; color: #64748b; border: none; padding: 12px; border-radius: 8px; cursor: pointer; }
+.manager-select {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 5px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #1e293b;
+  border-radius: 4px;
+  width: 100%;
+  transition: all 0.2s;
+}
+
+.manager-select:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.manager-select:focus {
+  outline: none;
+  background: white;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.announce-form-section {
+    margin-bottom: 30px;
+}
+
+.announce-form {
+    padding: 0 10px;
+}
+
+.form-row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 15px;
+}
+
+.input-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.input-group label {
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: #505181;
+    margin-bottom: 5px;
+}
+
+.input-group input, .input-group select, .input-group textarea {
+    padding: 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+}
+
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.status-badge.pending { background: #fef3c7; color: #92400e; }
+.status-badge.accepted { background: #dcfce7; color: #166534; }
+.status-badge.rejected { background: #fee2e2; color: #991b1b; }
+
+.status-select {
+    padding: 5px;
+    border-radius: 5px;
+    font-size: 0.8rem;
+}
+
+.file-link {
+    color: #004581;
+    text-decoration: underline;
+    font-size: 0.85rem;
+}
+
+.file-input {
+    border: 1px dashed #505181;
+    padding: 20px;
+    background: #f8fafc;
+    cursor: pointer;
+    text-align: center;
+}
+
+.file-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #c2dff8;
+    color: #004581;
+    padding: 6px 12px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: bold;
+    transition: 0.3s;
+}
+
+.file-btn:hover {
+    background-color: #a0cff8;
+}
+
+.mini-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.progress {
+    width: 100%;
+    height: 10px;
+    margin-top: 5px;
+    accent-color: #004581;
+}
+.toast-popup {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    min-width: 300px;
+    background: white;
+    padding: 16px;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    z-index: 9999;
+    border-left: 5px solid #004581;
+    overflow: hidden;
+}
+
+.toast-popup.success { border-left-color: #2ecc71; }
+.toast-popup.error { border-left-color: #e74c3c; }
+
+.toast-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.toast-content p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #333;
+    font-weight: 500;
+}
+
+.progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(0,0,0,0.1);
+    animation: progress 4s linear forwards;
+}
+
+@keyframes progress {
+    from { width: 100%; }
+    to { width: 0%; }
+}
+
+/* Animation Vue.js */
+.toast-fade-enter-active, .toast-fade-leave-active {
+    transition: all 0.4s ease;
+}
+.toast-fade-enter-from {
+    transform: translateX(100%);
+    opacity: 0;
+}
+.toast-fade-leave-to {
+    transform: translateX(100%);
+    opacity: 0;
+}
 </style>

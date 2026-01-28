@@ -29,6 +29,7 @@ import CRMManagement from'./views/CRMManagement.vue'
 import Dashboard from './views/Dashboard.vue'
 import ClosingArchives from './views/ClosingArchives.vue'
 import ModuleLayout from './Layout/ModuleLayout.vue'
+import Home from './views/Home.vue'
 
 const departments = ref([])
 
@@ -52,11 +53,12 @@ const routes = [
   { path: '/create-company/:userref', component: CreateCompany },
   { path: '/join-company/:userref', component: JoinCompany },
 
-   {
+  {
     path: '/home',
     component: ModuleLayout,
     children: [
-      { path: '', component: Dashboard },
+      { path: '', component: Home },
+      { path: 'dashboard', component: Dashboard },
       { path: 'profile', component: Profile },
       { 
         path: 'department/:deptName/:deptid', 
@@ -65,10 +67,14 @@ const routes = [
         props: true,
         beforeEnter: (to, from, next) => {
           const userStore = useUserStore();
+          const user = userStore.user.employe;
+          const hasHighPrivilege = ['owner', 'admin', 'hr'].includes(user.privilege);
+          const isMemberOfDept = user.deptref === to.params.deptid;
 
-          if (['owner', 'admin', 'hr'].includes(userStore.user.employe.privilege)) {
+          if (hasHighPrivilege || isMemberOfDept) {
             next();
           } else {
+            console.warn("Accès refusé : privilèges insuffisants ou mauvais département");
             next('/home');
           }
         }

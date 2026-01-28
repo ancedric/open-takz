@@ -13,8 +13,7 @@ const isSidebarOpen = ref(false);
 
 onMounted(async () => {
   // Correction de l'accès au companyref selon ton store
-  const companyRef = userStore.user.company.companyref 
-  console.log(userStore.user.employe)
+  const companyRef = userStore.user.company?.companyref || null;
   const { data: depts } = await supabase
     .from('department')
     .select('*')
@@ -25,8 +24,18 @@ onMounted(async () => {
 
 // 2. Création de la liste filtrée
 const dynamicDepartments = computed(() => {
-  return departments.value.filter(d => !excludedDepts.includes(d.deptname))
-})
+  const user = userStore.user.employe;
+
+  return departments.value
+    .filter(d => !excludedDepts.includes(d.deptname)) // Ton filtre actuel (exclusion)
+    .filter(d => {
+      // Ton nouveau filtre de sécurité
+      const isHighPrivilege = ['hr', 'owner', 'admin'].includes(user.privilege);
+      const isUserDept = user.deptref === d.deptref;
+
+      return isHighPrivilege || isUserDept;
+    });
+});
 
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value;
@@ -38,6 +47,7 @@ router.afterEach(() => {
 
 const logout = () => {
   // Logique de déconnexion ici
+  userStore.logout()
   router.push('/auth');
 };
 </script>
@@ -54,23 +64,64 @@ const logout = () => {
       <nav class="sidebar-nav">
         <div class="nav-section">
           <p class="section-title">Général</p>
-          <router-link to="/home" class="nav-item" v-if="userStore.user.employe.privilege !=='user'">🏠 Tableau de Bord</router-link>
-          <router-link to="/home/employe" class="nav-item">Portail employe</router-link>
+          
+          <router-link to="/home" class="nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            Actualités
+          </router-link>
+
+          <router-link to="/home/dashboard" class="nav-item" v-if="userStore.user.employe.privilege ==='owner'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="11" width="7" height="9"></rect><rect x="3" y="15" width="7" height="6"></rect></svg>
+            Tableau de Bord
+          </router-link>
+
+          <router-link to="/home/employe" class="nav-item" v-if="userStore.user.employe.companyref">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            Portail employé
+          </router-link>
         </div>
 
-        <div class="nav-section" v-if="userStore.user.employe.privilege !=='user'">
+        <div class="nav-section">
           <p class="section-title">Départements</p>
-          <router-link to="/home/hr" class="nav-item">👥 Ressources Humaines</router-link>
-          <router-link to="/home/accounting" class="nav-item">👥 Comptabilité</router-link>
-          <router-link to="/home/crm" class="nav-item">💰 Marketing</router-link>
-          <router-link to="/home/finance" class="nav-item">💰 Finance & Facturation</router-link>
-          <router-link v-for="d in dynamicDepartments" :key="d.deptref" :to="`/home/${d.deptname}/${d.deptref}`" class="nav-item"> {{d.deptname}} </router-link>
+          
+          <router-link to="/home/hr" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            Ressources Humaines
+          </router-link>
+
+          <router-link to="/home/accounting" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner' || userStore.user.employe.privilege ==='admin'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            Comptabilité
+          </router-link>
+
+          <router-link to="/home/crm" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner' || userStore.user.employe.privilege ==='admin'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+            Marketing
+          </router-link>
+
+          <router-link to="/home/finance" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner' || userStore.user.employe.privilege ==='admin'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+            Finance & Facturation
+          </router-link>
+
+          <router-link v-for="d in dynamicDepartments" :key="d.deptref" :to="`/home/department/${d.deptname}/${d.deptref}`" class="nav-item"> 
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            {{d.deptname}} 
+          </router-link>
         </div>
 
         <div class="nav-section settings">
           <p class="section-title">Compte</p>
-          <router-link to="/home/profile" class="nav-item">👤 Mon Profil</router-link>
-          <button @click="logout" class="nav-item logout-btn">🚪 Déconnexion</button>
+          
+          <router-link to="/home/profile" class="nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            Mon Profil
+          </router-link>
+          
+          <button @click="logout" class="nav-item logout-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            Déconnexion
+          </button>
         </div>
       </nav>
     </aside>
@@ -133,23 +184,44 @@ const logout = () => {
   margin-bottom: 10px;
 }
 
-.nav-item {
-  display: block;
-  padding: 12px 15px;
-  color: #cbd5e1;
-  text-decoration: none;
-  border-radius: 8px;
-  transition: all 0.2s;
-}
 
-.nav-item:hover, .router-link-active {
+.nav-item:hover, .router-link-active, .nav-item.router-link-active {
   background-color: #334155;
   color: white;
 }
 
-.logout-btn{
-  background-color: #c0340aff;
-  color: #eee;
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px; /* Espace entre le SVG et le texte */
+    padding: 10px 15px;
+    text-decoration: none;
+    color: #475569;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.nav-item svg {
+    flex-shrink: 0; /* Empêche le SVG de rétrécir si le texte est long */
+    color: #94a3b8; /* Couleur par défaut des icônes */
+    transition: color 0.2s ease;
+} 
+.nav-item:hover svg {
+    color: white; /* L'icône change de couleur au survol */
+}
+
+.nav-item.router-link-active svg {
+    color: white;
+}
+
+.logout-btn {
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    font-size: inherit;
 }
 .main-content {
   position: relative;

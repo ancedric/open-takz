@@ -21,8 +21,10 @@ const projectEndDate = ref('')
 const projectObjectives = ref('')
 const projectExpectedResults = ref('')
 const selectedDept = ref('')
-const selectedClient = ref('internal') // 'internal', 'existing', 'new'
+const selectedClient = ref('internal')
 const clientId = ref(null)
+const budget = ref(0)
+const projectGain = ref(0)
 
 // Gestion des listes
 const departments = ref([])
@@ -55,28 +57,39 @@ const submitProject = async () => {
     submitting.value = true
 
     try {
+        let docFilePath = null
         const projectRef = 'PROJ-' + Math.random().toString(36).substr(2, 9).toUpperCase()
-        
-        // 1. Gérer le nouveau client si nécessaire
+        const userRef = userStore.user.user.userref 
+
+        // --- GESTION DU DOCUMENT ---
+        if (file.value) {
+            const fileExt = file.value.name.split('.').pop()
+            const filePath = `${userStore.user.company.companyref}/${projectRef}.${fileExt}`
+
+            const { error: storageError } = await supabase.storage.from('projects documents').upload(filePath, file.value)
+            if (storageError) throw storageError
+
+            const { data: urlData } = supabase.storage.from('projects documents').getPublicUrl(filePath)
+            docFilePath = urlData.publicUrl
+        }
+
+        // --- 1. GESTION DU CLIENT ---
         let finalClientId = null
         if (selectedClient.value === 'new') {
             const cRef = 'CLI-' + Math.random().toString(36).substr(2, 7).toUpperCase()
-            const { data: nc, error: clientError } = await supabase.from('client').insert([{
+            const { error: clientError } = await supabase.from('client').insert([{
                 clientref: cRef,
                 companyname: newClientData.value.companyname,
                 contact_email: newClientData.value.contact_email,
                 companyref_owner: userStore.user.company.companyref
-            }]).select().single()
-
-            if (clientError) {
-                throw new Error("Erreur lors de la création du client : " + clientError.message)
-            }
-
+            }])
+            if (clientError) throw clientError
             finalClientId = cRef
-        } else if (selectedClient.value === 'existing') {
+        } else {
             finalClientId = clientId.value
         }
-        // 2. Insertion Projet
+
+        // --- 2. INSERTION DU PROJET ---
         const { error: dbError } = await supabase.from('project').insert([{
             projectref: projectRef,
             projectname: projectName.value,
@@ -88,33 +101,41 @@ const submitProject = async () => {
             deptref: selectedDept.value,
             clientref: finalClientId,
             companyref: userStore.user.company.companyref,
-            userref: userStore.user.user.userref
+            userref: userRef,
+            doc_url : docFilePath,
+            budget: budget.value || 0,
+            gain: projectGain.value || 0
         }])
-
         if (dbError) throw dbError
 
-        // 3. Storage (identique à ton code)
-        if (file.value) {
-            const fileExt = file.value.name.split('.').pop()
-            const filePath = `${userStore.user.companyref}/${projectRef}.${fileExt}`
-            await supabase.storage.from('documents').upload(filePath, file.value)
-            await supabase.from('documents').insert([{
-                doc_ref: 'DOC-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-                file_name: file.value.name,
-                file_path: filePath,
-                projectref: projectRef,
-                companyref: userStore.user.companyref
-            }])
-        }
+        // --- 3. CRÉATION AUTOMATIQUE DE L'ÉQUIPE ---
+        const teamRef = 'TEAM-' + Math.random().toString(36).substr(2, 9).toUpperCase()
+        const { error: teamError } = await supabase.from('team').insert([{
+            teamref: teamRef,
+            projectref: projectRef,
+            userref: userRef, 
+            role: 'Chef de projet'
+        }])
+        if (teamError) throw teamError
+
+        // --- 4. ENREGISTREMENT DU COLLABORATEUR (Chef de projet) ---
+        const collabRef = 'COL-' + Math.random().toString(36).substr(2, 9).toUpperCase()
+        const { error: collabError } = await supabase.from('collaborator').insert([{
+            collabref: collabRef,
+            userref: userRef,
+            teamref: teamRef,
+            role: 'Chef de projet'
+        }])
+        if (collabError) throw collabError
 
         success.value = true
         setTimeout(() => {
             emit('closeForm')
-            router.push(`/home/project/${userStore.user.userref}`)
+            closeFrom() 
         }, 1500)
 
     } catch (err) {
-        console.error(err)
+        console.error("Erreur lors de la création du projet complet:", err)
         errors.value = true
     } finally {
         submitting.value = false
@@ -196,6 +217,14 @@ const submitProject = async () => {
                         <div class="input-group">
                             <label>Résultats Attendus (KPIs)</label>
                             <textarea v-model="projectExpectedResults" placeholder="Livrables finaux..."></textarea>
+                        </div>
+                        <div class="input-group">
+                            <label>Budget estimé</label>
+                            <input type="number" v-model="budget">
+                        </div>
+                        <div class="input-group">
+                            <label>Bénéfice estimé</label>
+                            <input type="number" v-model="projectGain">
                         </div>
                     </div>
                 </section>

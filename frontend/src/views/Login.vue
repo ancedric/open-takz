@@ -105,7 +105,7 @@ const handleSubmit = async () => {
                 
                 // 5. Redirection vers le dashboard ou les projets
                 setTimeout(() => {
-                    router.push('/home'); // Ou router.push('/project/' + userData.userref)
+                    router.push('/home');
                 }, 1500);
             }
         }

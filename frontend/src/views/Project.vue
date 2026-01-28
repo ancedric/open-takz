@@ -1,19 +1,25 @@
 <script setup>
     import supabase from '../services/supabaseConfig.js'
     import { ref, onMounted, computed, watch } from 'vue'
-    import Header from '../components/Header.vue'
     import Spinner from '../components/Spinner.vue'
     import { useUserStore } from '../store/index.js'
     import AddTaskBar from '../components/AddTaskBar.vue'
     import ProjectProgressChart from '../components/ProjectProgressChart.vue';
     import { useRoute } from 'vue-router'
     
+    console.log("Démarrage du composant projet");
     const props = defineProps({
-        deptName: String,
-        deptId: String,
-    })
-
-    const deptRef = computed(() => props.deptId)
+        deptName: {
+            type: String,
+            required: true
+        },
+        deptid: {
+            type: String,
+            required: true
+        }
+        });
+    const route = useRoute()
+    const deptRef = props.deptid
     const open = ref(false)
     const selectedProjectId = ref()
     const calendarContainer = ref(null); 
@@ -22,8 +28,7 @@
     const hoveredTaskDetails = ref(null);
     const currentMonth = ref(new Date().getMonth());
     const userStore = useUserStore()
-    const projects = computed(() => userStore.projects);
-    const route = useRoute()
+    const projects = ref()
     const success = ref(false)
     const errors = ref(false)
     const isProjectsLoading = ref(true)
@@ -43,24 +48,131 @@
     const isKanbanTabActive = ref(false)
     const isTimelineTabActive = ref(false)
     const isGanttTabActive = ref(false)
+    const isTaskSubmmitting = ref(false)
     const newTaskName = ref('')
-    const newTaskDesc = ref('')
+    const newTaskBudget = ref(0)
     const newTaskStart = ref('')
     const newTaskEnd = ref('')
-    const ongoing = ref('ongoing')
-    const completed = ref('completed')
-    const validated = ref('validated')
+    const newTaskDesc = ref('')
+    const selectedRole = ref('Member')
     const foundMember = ref(null)
+    const projectReports = ref([])
+    const newReport = ref({ content: '', progress: 0 });
 
+    const getProjectStats = () => {
+        const bgt = userStore.currentProject.tasks.reduce((acc, t) => acc + (t.task_budget || 0), 0) || 0;
+        const exp = userStore.currentProject.tasks.filter(t => t.status === 'completed').reduce((acc, t) => acc + (Number(t.task_budget) || 0), 0);
+        const expectedProfit = userStore.currentProject.project.gain - bgt
+        const prof = expectedProfit - exp
+        const mar = bgt - exp
+        const remdDays = (() => {
+            const endDate = new Date(userStore.currentProject.project.end_date);
+            const now = new Date();
+            const diffTime = endDate - now;
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        })();
+
+        const stats = {
+            budget: bgt,
+            expenses: exp,
+            profit: prof,
+            margin: mar,
+            expectation: expectedProfit,
+            completionRate: calculateOverallProgress(),
+            reamainingDays: remdDays
+        };
+
+        return stats;
+    };
+
+    const projectStats = ref(
+        {
+            budget: 0,
+            expenses: 0,
+            profit: 0,
+            margin: 0,
+            expectation: 0,
+            completionRate: 0,
+            reamainingDays: 0
+        }
+    );
+
+    const markProjectAsDelivered = async () => {
+        const project = userStore.currentProject.project;
+        
+        try {
+            // 1. Mettre à jour le statut du projet
+            const { error: updateError } = await supabase
+                .from('project')
+                .update({ status: 'delivered', delivered_at: new Date() })
+                .eq('projectref', project.projectref);
+
+            if (updateError) throw updateError;
+
+            // 2. Créer la transaction financière de revenu (Le Gain -> Caisse)
+            const { error: transacError } = await supabase
+                .from('finance_transactions')
+                .insert([{
+                    amount: project.gain,
+                    category: 'income',
+                    label: `Paiement Client : ${project.projectname}`,
+                    project_ref: project.projectref,
+                    companyref: userStore.user.employe.companyref,
+                    type: 'credit'
+                }]);
+
+            if (transacError) throw transacError;
+
+            triggerToast("Projet livré et gain transféré en caisse !", "success");
+        } catch (err) {
+            console.error("Erreur livraison:", err);
+        }
+    };
+
+    // Calculer le % d'avancement basé sur les tâches complétées
+    function calculateOverallProgress() {
+        const tasks = userStore.currentProject.tasks || [];
+        if (tasks.length === 0) return 0;
+        const completedTasks = tasks.filter(t => t.status === 'validated' || t.status === 'completed').length;
+        return Math.round((completedTasks / tasks.length) * 100);
+    };
+
+    const submitProjectReport = async () => {
+        if (!newReport.value.content) return;
+
+        const { data, error } = await supabase
+            .from('project_reports')
+            .insert([{
+                project_ref: selectedProjectId.value,
+                author_ref: userStore.user.user.userref,
+                content: newReport.value.content,
+                progress_at_time: projectStats.value.completionRate,
+                company_ref: userStore.user.employe.companyref
+            }]);
+
+        if (!error) {
+            newReport.value.content = '';
+            fetchProjectReports(); // Rafraîchir la liste
+        }
+    };
+
+    const fetchProjectReports = async () => {
+        const { data } = await supabase
+            .from('project_reports')
+            .select('*, user:author_ref(firstname, lastname)')
+            .eq('project_ref', selectedProjectId.value)
+            .order('created_at', { ascending: false });
+        projectReports.value = data || [];
+    };
     const displayedYears = computed(() => {
-            const years = [];
-            for (let i = 0; i < 5; i++) {
-                years.push(currentYear.value - i);
-            }
-            return years.sort((a, b) => b - a); 
-        });
+        const years = [];
+        for (let i = 0; i < 5; i++) {
+            years.push(currentYear.value - i);
+        }
+        return years.sort((a, b) => b - a); 
+    });
 
-    function getTaskStyle(task) {
+function getTaskStyle(task) {
     const start = new Date(task.startdate);
     const end = new Date(task.enddate);
 
@@ -166,33 +278,34 @@ const handleDayHover = (day, event) => {
     };
 };
 
-
     const assignMemberToTask = async (taskRef, memberDataString) => {
         try {
             const memberData = JSON.parse(memberDataString);
             const userRef = memberData.userRef;
             const collabRef = memberData.collabRef;
-
-            /*const response = await axios.post(
-                `${import.meta.env.VITE_API_URL}/assignment/new-assignment`,
-                { 
-                    taskRef,
-                    collabRef,
-                    userRef
-                }
-            );*/
+            const assRef = `ASS-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
 
             const {data, error} = await supabase
-            .from('assignment')
+            .from('assignments')
             .insert({ 
-                    taskRef,
-                    collabRef,
-                    userRef
-                })
-            
+                assref: assRef,
+                taskref: taskRef,
+                collabref: collabRef,
+                userref: userRef
+            })
+            if(error) throw error
             if (data) {
+                /*userStore.currentProjecct.asssignments.push({
+                    assref: assRef,
+                    taskref: taskRef,
+                    collabref: collabRef,
+                    userref: userRef
+                    user: {
+                       firstname:memberData.firstname 
+                    }
+                })*/
                 // Rafraîchir les tâches après assignation
-                await userStore.getProjects(deptRef.value);
+                await userStore.getProjects(deptRef);
                 return true;
             }
         } catch (error) {
@@ -200,75 +313,6 @@ const handleDayHover = (day, event) => {
             return false;
         }
     };
-
-    const setCurrentProject = async (projectRef) => {
-        try {
-            const project = projects.value.find(p => p.projectref === projectRef)
-            if (!project) {
-            userStore.currentProject.project.value = { 
-                project:{},
-                team: [] };
-            return;
-            }
-
-            selectedProjectId.value = project.projectref;
-            
-            // Initialise currentProject avec team vide
-            userStore.currentProject.project.value = {
-                ...project,
-                team: []
-            };
-
-            // Charge l'équipe seulement si projectRef existe
-            if (projectRef) {
-                const team = await getProjectTeam(projectRef);
-                const membersWithDetails = await Promise.all(
-                    team.map(async member => {
-                        const userDetails = await getTeamUser(member.userref);
-
-                        return {
-                            ...member,
-                            user: userDetails || {
-                            firstname: 'Unknown',
-                            lastname: 'User',
-                            email: '',
-                            profilePhotoUrl: '../assets/images/default-avatar.png'
-                            }
-                        };
-                    })
-                );
-                userStore.currentProject.project.value = {
-                    ...userStore.currentProject.project.value,
-                    team: membersWithDetails
-                };
-            }
-
-        } catch (error) {
-            console.error('Error setting project:', error);
-            userStore.currentProject.project.value = { team: [] };
-        }
-    };
-    const getTeamUser = async (userRef) => {
-    try {
-        /*const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/user/${userRef}`
-        );*/
-
-        const {data, error} = await supabase
-        .from('user')
-        .select('*')
-        eq('userref', userRef)
-
-        if (error) {
-            return null;
-        }
-        // Si aucune donnée n'est trouvée, retournez null ou un objet par défaut pour éviter les erreurs
-        return data;
-    } catch (error) {
-        console.error("Fetch error for team user:", error);
-        return null;
-    }
-};
 
 const openOverview = () => {
     isOverviewOpen.value = true
@@ -342,56 +386,83 @@ const addDocuments = () => {
     isTeamFormOpen.value = false
     isSubmenuOpen.value = false
 }
-const submitTask = async ()=> {
-    try {
-        console.log("data: ", newTaskName.value, newTaskStart.value, newTaskEnd.value, userStore.currentProject.project.projectref)
-        const taskRef = 'TASK-' + Math.random().toString(36).substr(2, 9).toUpperCase()
-        const {data, error} = await supabase
-        .from('task')
-        .insert({ 
-            taskref: taskRef,
-            taskname: newTaskName.value,
-            startdate: newTaskStart.value,
-            enddate: newTaskEnd.value,
-            status: 'ongoing',
-            projectref: userStore.currentProject.project.projectref,
-        })
-        .select()
 
-        if (error) {
-            // Ici Supabase vous dira si c'est une erreur de permission (RLS) ou de colonne
-            console.error("Erreur Supabase détaillée:", error.message);
-            errors.value = true;
-            return;
-        }
+const removeFromTeam = async (collabRef) => {
+    if (!confirm("Voulez-vous vraiment retirer ce membre du projet ?")) return;
+
+    try {
+        const { error } = await supabase
+            .from('team')
+            .delete()
+            .eq('collabref', collabRef);
+
+        if (error) throw error;
+
+        // Mise à jour locale du store
+        userStore.currentProject.team = userStore.currentProject.team.filter(
+            m => m.collabref !== collabRef
+        );
+        
+        // Optionnel : Désassigner aussi les tâches de ce membre
+        await supabase
+            .from('assignment')
+            .delete()
+            .eq('collabRef', collabRef);
+
+    } catch (err) {
+        console.error("Erreur lors de la suppression du membre:", err);
+        triggerToast("Erreur lors de la suppression du membre.", "error");
+    }
+};
+
+const submitTask = async () => {
+    try {
+        isTaskSubmmitting.value = true
+        if (!newTaskName.value || !newTaskStart.value || !newTaskEnd.value) return;
+        
+        const taskRef = 'TASK-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+        
+        const { data, error } = await supabase
+            .from('task')
+            .insert({ 
+                taskref: taskRef,
+                taskname: newTaskName.value,
+                description: newTaskDesc.value, // Ajouté
+                startdate: newTaskStart.value,
+                enddate: newTaskEnd.value,
+                task_budget: newTaskBudget.value,
+                status: 'pending',
+                projectref: userStore.currentProject.project.projectref,
+            })
+            .select();
+
+        if (error) throw error;
+
         if (data) {
-            success.value = true
-            await userStore.getProjects(deptRef.value)
-            resetTaskForm()
-            userStore.currentProject.tasks.push(data)
-            isTaskFormOpen.value = false
-            console.log("tasks: ", userStore.currentProject.tasks)
+            success.value = true;
+            userStore.currentProject.tasks.push(data[0]);
+            await userStore.getProjects(deptRef);
+            isTaskFormOpen.value = false;
+            isTaskSubmmitting.value = false
+            resetTaskForm();
         }
     } catch (error) {
-        console.error("Error adding task:", error)
-        errors.value = true
+        console.error("Erreur lors de l'ajout de la tâche:", error);
+        errors.value = true;
     }
-}
-// Fonction pour réinitialiser le formulaire
+};
+
 const resetTaskForm = () => {
     newTaskName.value = '';
+    newTaskDesc.value = '';
     newTaskStart.value = '';
     newTaskEnd.value = '';
+    newTaskBudget.value = 0; // Reset budget
 };
 
 const setTaskStatus = async (status, taskRef) => {
     try{
-        /*const response = await axios.put(
-            `${import.meta.env.VITE_API_URL}/task/set-status/${taskRef}`,
-            { 
-                status: status,
-            }
-        )*/
+        userStore.currentProject.project.tasks.filter(t => t.taskref === taskRef)[0].status = status;
         const {data, error}= await supabase
         .from('task')
         .update({status: status})
@@ -399,8 +470,23 @@ const setTaskStatus = async (status, taskRef) => {
         .select()
 
         if (data) {
+            if(status === "ongoing"){
+                ///initier la transaction finacière
+                const {data: taskData, error: taskError} = await supabase
+                .from('finance_transactions')
+                .insert([{
+                    amount: userStore.currentProject.project.tasks.filter(t => t.taskref === taskRef)[0].task_budget,
+                    category: 'expense',
+                    label: `Coût Tâche : ${userStore.currentProject.project.tasks.filter(t => t.taskref === taskRef)[0].taskname}`,
+                    project_ref: userStore.currentProject.project.projectref,
+                    companyref: userStore.user.employe.companyref,
+                    type: 'debit'
+                }]);
+                if (taskError) throw taskError;
+                
+            }
             success.value = true
-            await userStore.getProjects(deptRef.value)
+            await userStore.getProjects(deptRef)
         }
     }catch(err){
         console.error("Error adding task:", err)
@@ -408,34 +494,6 @@ const setTaskStatus = async (status, taskRef) => {
     }
 }
 
-/*const sendInvitation = async (memberEmail, projectId, projectname) => {
-        try {
-            const response = await axios.post(
-                `${import.meta.env.VITE_API_URL}/email/send-email`,
-            {
-                to: memberEmail,
-                subject: "Invitation à rejoindre un projet",
-                text: `Vous avez été invité à rejoindre le projet ${projectname} sur Opentaskz!`,
-                html: `
-                <h1>Rejoignez notre équipe</h1>
-                <p>Cliquez sur le lien ci-dessous pour accepter l'invitation :</p>
-                <a href="${window.location.origin}/project/${projectId}/join">
-                    Accepter l'invitation
-                </a>
-                `,
-                projectId: projectId
-            }
-            );
-
-            if (response.status === 200) {
-                console.log("Email envoyé avec succès");
-            // Afficher une notification à l'utilisateur
-            }
-        } catch (error) {
-            console.error("Erreur lors de l'envoi de l'email:", error);
-            // Gérer l'erreur (notification à l'utilisateur)
-        }
-    };*/
 const handleSearch = () => {
     if (searchKey.value) {
         open.value = true
@@ -521,84 +579,86 @@ const calculateTimeRemaining = (startDate, endDate) => {
             isMembersLoading.value = false;
         }
     }
-    const addToTeam = async (email, projectref) => {
+    const addToTeam = async (teamRef, email, role) => {
         try {
             if (!foundMember.value) return;
-
-            const memberToAdd = foundMember.value;
-
-            // 1. Vérifier si le membre est déjà dans l'équipe pour éviter les doublons
-            const isAlreadyInTeam = userStore.currentProject.team.some(
-                m => m.userref === memberToAdd.userref
-            );
-
-            if (isAlreadyInTeam) {
-                alert("Cet employé fait déjà partie de l'équipe.");
-                return;
-            }
-
-            // 2. Insertion dans la table 'team'
-            const { data, error } = await supabase
-                .from('team')
-                .insert([{
-                    projectref: projectref,
-                    userref: memberToAdd.userref,
-                    role: 'Member', // Rôle par défaut
-                    teamref: 'TEAM-' + Math.random().toString(36).substr(2, 9).toUpperCase()
-                }])
-                .select()
-                .single();
-
-            if (error) throw error;
-
-            // 3. Mise à jour locale du store pour l'affichage immédiat
-            // On ajoute l'utilisateur complet pour que le template puisse l'afficher
-            const newTeamMember = {
-                ...data,
-                user: memberToAdd
-            };
+            //Récupérer la ref de l'utilisateur
+            const {data: userData, error: userError} = await supabase.from('user')
+                .select('*')
+                .eq('email', email)
+                .single()
             
-            userStore.currentProject.team.push(newTeamMember);
-            
-            // Réinitialisation
+                if(userError) throw error
+
+                const userRef = userData.userref
+
+            // --- 4. ENREGISTREMENT DU COLLABORATEUR (Chef de projet) ---
+            const collabRef = 'COL-' + Math.random().toString(36).substr(2, 9).toUpperCase()
+            const { data: collabData, error: collabError } = await supabase.from('collaborator').insert([{
+                collabref: collabRef,
+                userref: userRef,
+                teamref: teamRef,
+                role: role
+            }])
+            .select('*, user:userref(*)')
+            .single();
+
+            if (collabError) throw collabError
+
+            userStore.currentProject.team.push({
+                collabref: collabRef,
+                role: role,
+                user: userData
+            });
             searchMember.value = '';
             foundMember.value = null;
+            success.value = true;
 
         } catch (err) {
-            console.error("Erreur lors de l'ajout à l'équipe:", err);
+            console.error("Erreur ajout équipe:", err);
         }
-    }
+    };
+
     onMounted(async () => {
-        if(deptRef.value){
-            await userStore.getProjects(deptRef.value);
+        if(deptRef){
+            await userStore.getProjects(deptRef);
+            projects.value = userStore.projects;
         }
+
         isProjectsLoading.value = false
         daysInYear.value = generateYearCalendar(currentYear.value);
     });
 
-    watch(() => route.params.id, async (newId) => {
-        if (newId) {
-            selectedProjectId.value = newId;
-            // Appelez l'action du store pour charger les détails complets du projet
-            await userStore.getProjectDetails(newId);
-        }
-    }, { immediate: true });
-    // Ce watcher gère la mise à jour des éléments visuels (calendrier, gantt) quand les tâches du projet courant changent.
-    watch(
-        () => userStore.currentProject.tasks,
-        (newTasks) => {
+    // On observe la propriété réactive du store
+    watch(() => userStore.currentProject, (newVal) => {
+        if (newVal && Object.keys(newVal).length > 0) {
+            // Met à jour les stats du projet après le changement des données
+            projectStats.value = getProjectStats();
+            
+            // Remplit le calendrier avec les tâches
             populateTasksInCalendar();
-        },
-        { deep: true } // Utiliser deep pour surveiller les changements à l'intérieur des objets tâches
-    );
 
-    watch(
-        () => selectedProjectId.value,
-        (newProjectId) => {
-            // Recharger le projet et donc les tâches lorsque le projet sélectionné change
-            setCurrentProject(newProjectId);
+            console.log('projet: ', userStore.currentProject);
+            console.log('stats du projet: ', projectStats.value);
         }
-    );
+    }, { deep: true, immediate: true });
+    /*watch(() => route.params.id, async (newId) => {
+    if (newId) {
+        selectedProjectId.value = newId;
+        await userStore.getProjectDetails(newId);
+        // --- NOUVEAUX APPELS ---
+        //await fetchProjectFinancials(newId);
+        await fetchProjectReports(newId);
+    }
+    userStore.currentProject().then(() => {
+        // Met à jour les stats du projet après le chargement des détails
+        projectStats.value = getProjectStats();
+        // Remplit le calendrier avec les tâches
+        populateTasksInCalendar();
+            console.log('projet: ', userStore.currentProject)
+            console.log('stats du projet: ', projectStats.value)
+    });
+}, { immediate: true });*/
 
 </script>
 
@@ -684,10 +744,10 @@ const calculateTimeRemaining = (startDate, endDate) => {
                         </div>
                     <div class="proj-menu">
                         <ul>
-                            <li @click="openOverview">Overview</li>
-                            <li @click="openDashboard">Dashboard</li>
-                            <li @click="openReport">Activity Report</li>
-                            <li @click="openTasks">Tasks</li>
+                            <li :class="isOverviewOpen ? 'active' : ''" @click="openOverview">Overview</li>
+                            <li :class="isDashboardOpen ? 'active' : ''" @click="openDashboard">Dashboard</li>
+                            <li :class="isReportOpen ? 'active' : ''" @click="openReport">Activity Report</li>
+                            <li :class="isTasksOpen ? 'active' : ''" @click="openTasks">Tasks</li>
                         </ul>
                     </div>
                 </div>
@@ -700,7 +760,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                     {{ userStore.currentProject.project.description }}
                                 </p>
                                 <p v-else>
-                                    No description provided
+                                    No Description provided
                                 </p>
                             </div>
                             
@@ -751,11 +811,29 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                     No start date provided
                                 </p>
                             </div>
+                            <div>
+                                <h3>Budget alloué</h3>
+                                <p v-if="userStore.currentProject.project&& userStore.currentProject.project.budget">
+                                    {{ projectStats.budget }}
+                                </p>
+                                <p v-else>
+                                    No Budget provided
+                                </p>
+                            </div>
+                            <div>
+                                <h3>Profit estimé</h3>
+                                <p v-if="userStore.currentProject.project&& userStore.currentProject.project.gain">
+                                    {{ userStore.currentProject.project.gain }}
+                                </p>
+                                <p v-else>
+                                    No profit provided
+                                </p>
+                            </div>
                             <div class="attachments">
-                                <h3>Attachments</h3>
-                                <div v-if="userStore.currentProject.project.attachments">
-                                    <div v-for="file in userStore.currentProject.project.attachments" class="file" :key="file.fileRef">
-                                        <p><a :href="file.fileUrl">{{ file.fileName }}</a></p>
+                                <h3>Document du projet</h3>
+                                <div v-if="userStore.currentProject.project.doc_url">
+                                    <div  class="file">
+                                        <p><a :href="userStore.currentProject.project.doc_url" target="blank">Voir le document du projet</a></p>
                                     </div>
                                 </div>
                                 <p v-else>No attachments provided</p>
@@ -763,15 +841,44 @@ const calculateTimeRemaining = (startDate, endDate) => {
                         </div>
                     </div>
                     <div class="overview" v-else>
-                        <p >
-                            Select a project to view details
-                        </p>
+                        <p> Select a project to view details </p>
                     </div>
-                    
                 </div>
                 <div class="dashboard-ctn" v-show="isDashboardOpen">
                     <h2>Project Dashboard</h2>
                     <p v-if="userStore.currentProject.project">
+                        <div class="finance-kpi-bar">
+                            <div class="kpi-card" :class="projectStats.margin < 0 ? 'bg-red-light' : ''">
+                                <label>Budget Consommé</label>
+                                <span class="val">{{ projectStats.expenses }} XAF/ {{ projectStats.budget }} XAF</span>
+                                <small v-if="projectStats.margin < 0">Dépassement de budget !</small>
+                            </div>
+
+                            <div class="kpi-card">
+                                <label>Profit Attendu </label>
+                                <span class="val text-blue">{{ projectStats.expectation }} XAF</span>
+                            </div>
+
+                            <div class="kpi-card">
+                                <label>Profit réel</label>
+                                <span class="val text-blue">{{ projectStats.profit }} XAF</span>
+                            </div>
+
+                            <div class="kpi-card">
+                                <label>Marge de sécurité</label>
+                                <span class="val" :class="projectStats.margin >= 0 ? 'text-green' : 'text-red'">
+                                    {{ projectStats.margin}} XAF
+                                </span>
+                            </div>
+                            
+                            <button 
+                                v-if="userStore.currentProject.project.status !== 'delivered'"
+                                class="add-btn" 
+                                @click="markProjectAsDelivered"
+                            >
+                                <AppIcon name="CHECK" /> Livrer le Projet
+                            </button>
+                        </div>
                         <div class="top">
                             <div class="nb-task">
                                 <div class="nb-ongoing-tasks">
@@ -839,6 +946,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                         <div class="bottom">
                             <div class="bottom-header">
                                 <p>Task Name</p>
+                                <p>Budget/tâche</p>
                                 <p>Status</p>
                                 <p>Start Date</p>
                                 <p>End Date</p>
@@ -847,9 +955,10 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                 <ul>
                                     <li v-for="task in userStore.currentProject.tasks" :key="task.taskref">
                                         <p>{{ task.taskname }}</p>
+                                        <p>{{ task.task_budget }}</p>
                                         <p>{{ task.status }}</p>
-                                        <p>{{ task.startDate }}</p>
-                                        <p>{{ task.endDate }}</p>
+                                        <p>{{ task.startdate }}</p>
+                                        <p>{{ task.enddate }}</p>
                                     </li>
                                 </ul>
                             </div>
@@ -863,14 +972,25 @@ const calculateTimeRemaining = (startDate, endDate) => {
                     </p>
                 </div>
                 <div class="report-ctn" v-show="isReportOpen">
-                    <h2>Project Activity Report</h2>
-                    <div v-if="userStore.currentProject.project">
-                        <ProjectProgressChart />
+                <ProjectProgressChart />
+
+                <div class="manager-reports-zone">
+                    <h3>Rapports de rentabilité & Avancement</h3>
+                    <div class="input-group">
+                        <textarea v-model="newReport.content" placeholder="Note pour le manager sur la santé du projet..."></textarea>
+                        <button class="submit-btn" @click="submitProjectReport">Envoyer le rapport</button>
                     </div>
-                    <p v-else>
-                        Select a project to view details
-                    </p>
+                    
+                    <div class="reports-list">
+                        <div v-for="rep in projectReports" :key="rep.id" class="report-item">
+                            <div class="rep-header">
+                                <strong>{{ rep.user.firstname }}</strong> — <span>{{ new Date(rep.created_at).toLocaleDateString() }}</span>
+                            </div>
+                            <p>{{ rep.content }}</p>
+                        </div>
+                    </div>
                 </div>
+            </div>
                 <div class="tasks-ctn" v-show="isTasksOpen">
                     <h2>Project Tasks</h2>
                     <div v-if="userStore.currentProject.project">
@@ -879,7 +999,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                 <div class="tab-items">
                                     <div :class="{ 't-item': true, 'active': isListTabActive }" @click="openListView">List</div>
                                     <div :class="{ 't-item': true, 'active': isKanbanTabActive }"@click="openKanbanView">Kanban</div>
-                                    <div :class="{ 't-item': true, 'active': isTimelineTabActive }" @click="openTimelineView">Timeline</div>
+                                    <!-- <div :class="{ 't-item': true, 'active': isTimelineTabActive }" @click="openTimelineView">Timeline</div> -->
                                     <div :class="{ 't-item': true, 'active': isGanttTabActive }" @click="openGanttView">Gantt</div>
                                 </div>
                             </div>
@@ -931,18 +1051,18 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                             <div class="elem" v-if="task.status==='pending'">
                                                 <div class="elem-title">{{task.taskname}}</div>
                                                 <div class="elem-status"> 
-                                                    <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startDate, task.endDate) }} remaining</p>
+                                                    <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startdate, task.enddate) }} remaining</p>
                                                 </div>
-                                                <div class="elem-members">
-                                                    <img v-for="assignment in currentProject.assignments" 
-                                                    v-if="assignment.taskref===task.taskref"
-                                                        :key="assignment.assref"
-                                                        :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
-                                                        :alt="assignment.user?.firstname"
-                                                        :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
-                                                        class="assignee-avatar">
+                                                <div class="elem-members" v-if="userStore.currentProject.assignments.length > 0">
+                                                    <template v-for="assignment in userStore.currentProject.assignments" :key="assignment.assref">
+                                                        <img v-if="assignment.taskref === task.taskref"
+                                                            :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
+                                                            :alt="assignment.user?.firstname"
+                                                            :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
+                                                            class="assignee-avatar">
+                                                    </template>
                                                 </div>
-                                                <button class="btn" @click="setTaskStatus(ongoing, task.taskref)">Start</button>
+                                                <button class="btn" @click="setTaskStatus('ongoing', task.taskref)">Start</button>
                                             </div>
                                         </div>
                                     </div>
@@ -954,8 +1074,17 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                                 <div class="elem-status"> 
                                                     <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startdate, task.enddate) }} remaining</p>
                                                 </div>
-                                                <div class="elem-members">{{task.taskname}}</div>
-                                                <button class="btn" @click="setTaskStatus(completed, task.taskref)">Mark as Completed</button>
+                                                <div class="elem-members" v-if="userStore.currentProject.assignments.length > 0">
+                                                    <template v-for="assignment in userStore.currentProject.assignments" :key="assignment.assref">
+                                                        <img v-if="assignment.taskref === task.taskref"
+                                                            :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
+                                                            :alt="assignment.user?.firstname"
+                                                            :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
+                                                            class="assignee-avatar">
+                                                    </template>
+                                                </div>
+                                                
+                                                <button class="btn" @click="setTaskStatus('completed', task.taskref)">Mark as Completed</button>
                                             </div>
                                         </div>
                                     </div>
@@ -967,8 +1096,16 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                                 <div class="elem-status"> 
                                                     <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startDate, task.endDate) }} remaining</p>
                                                 </div>
-                                                <div class="elem-members">{{task.taskname}}</div>
-                                                <button class="btn" @click="setTaskStatus(verified, task.taskref)">Verify</button>
+                                                <div class="elem-members" v-if="userStore.currentProject.assignments.length > 0">
+                                                    <template v-for="assignment in userStore.currentProject.assignments" :key="assignment.assref">
+                                                        <img v-if="assignment.taskref === task.taskref"
+                                                            :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
+                                                            :alt="assignment.user?.firstname"
+                                                            :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
+                                                            class="assignee-avatar">
+                                                    </template>
+                                                </div>
+                                                <button class="btn" @click="setTaskStatus('verified', task.taskref)">Verify</button>
                                             </div>
                                         </div>
                                     </div>
@@ -980,51 +1117,21 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                                 <div class="elem-status"> 
                                                     <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startdate, task.enddate) }} remaining</p>
                                                 </div>
-                                                <div class="elem-members">{{task.taskname}}</div>
+                                                <div class="elem-members" v-if="userStore.currentProject.assignments.length > 0">
+                                                    <template v-for="assignment in userStore.currentProject.assignments" :key="assignment.assref">
+                                                        <img v-if="assignment.taskref === task.taskref"
+                                                            :src="assignment.user?.profilephotourl || '../assets/images/default-avatar.png'"
+                                                            :alt="assignment.user?.firstname"
+                                                            :title="`${assignment.user?.firstname} ${assignment.user?.lastname}`"
+                                                            class="assignee-avatar">
+                                                    </template>
+                                                </div>
                                                 <button class="btn">Completed</button>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class=" view tl" v-show="isTimelineTabActive">
-                                <div class="calendar-container" ref="calendarContainer">
-                                    <div
-                                        v-for="day in daysInYear"
-                                        :key="day.date.toISOString()"
-                                        class="calendar-day"
-                                        :class="{ 'task-day': day.hasTask }"
-                                        @mouseover="handleDayHover(day, $event)"
-                                        @mouseleave="hoveredTaskDetails = null"
-                                    ></div>
-
-                                    <div class="task-details" :style="{ 
-                                            left: hoveredTaskDetails ? hoveredTaskDetails.x + 'px' : '0px', 
-                                            top: hoveredTaskDetails ? hoveredTaskDetails.y + 'px' : '0px',
-                                            display: hoveredTaskDetails ? 'block' : 'none' 
-                                        }">
-                                        <ul v-if="hoveredTaskDetails">
-                                            <li v-for="task in hoveredTaskDetails.tasks" :key="task.taskref">
-                                                {{ task.taskname }} - {{ task.status }}
-                                            </li>
-                                            <li >
-                                                {{ hoveredTaskDetails.date }}
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                                <div class="years-sidebar">
-                                        <div
-                                            v-for="year in displayedYears"
-                                            :key="year"
-                                            class="year-item"
-                                            :class="{ 'current-year': year === currentYear }"
-                                        >
-                                        {{ year }}
-                                        </div>
-                                    </div>
-                            </div>
-                            
                             <div class="view gt" v-show="isGanttTabActive">
                                 <div class="gantt-container" :style="{ '--days-count': daysInMonth.length }">
                                     <!-- Label du mois -->
@@ -1055,9 +1162,6 @@ const calculateTimeRemaining = (startDate, endDate) => {
                             </div>
                         </div>
                     </div>
-                    <p v-else>
-                        Select a project to view details
-                    </p>
                 </div>
             </div>
             <div class="main-ctn-setup">
@@ -1075,78 +1179,95 @@ const calculateTimeRemaining = (startDate, endDate) => {
                 </div>
             </div>
         </div>
-        <div class="addTask-form" v-show="isTaskFormOpen">
-            <div class="task-form" v-show="isTaskFormOpen">
-                <h3>Add Task</h3>
+        
+        <div class="modal-overlay" v-if="isTaskFormOpen && userStore.currentProject.project" @click.self="isTeamFormOpen = false">
+        <div class="addTask-form">
+            <div class="task-form">
+                <h3>🚀 Nouvelle Tâche</h3>
                 <form @submit.prevent="submitTask">
-                    <input type="text" placeholder="Task Name" v-model="newTaskName" required>
-                    <input type="text" placeholder="Task Description" v-model="newTaskDesc" required>
-                    <label for="start">Start</label>
-                    <input type="date" name = "start" placeholder="Start Date" v-model="newTaskStart" required>
-                    <label for="end">Deadline</label>
-                    <input type="date" name="end" placeholder="End Date" v-model="newTaskEnd" required>
+                    <div class="input-group">
+                        <label>Nom de la tâche</label>
+                        <input type="text" v-model="newTaskName" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Description</label>
+                        <textarea v-model="newTaskDesc" required></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>Début</label>
+                            <input type="date" v-model="newTaskStart" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Échéance</label>
+                            <input type="date" v-model="newTaskEnd" required>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Budget alloué (XAF)</label>
+                        <input type="number" v-model="newTaskBudget" placeholder="Optionnel">
+                    </div>
+
                     <div class="btn-ctn">
-                        <button type="submit" class="submit-btn" @click="submitTask">Add</button>
-                        <button type="button" @click="isTaskFormOpen = !isTaskFormOpen" class="cancel-btn">Cancel</button>
+                        <button type="submit" class="submit-btn" :disabled="isTaskSubmmitting">Ajouter la tâche</button>
+                        <button type="button" @click="isTaskFormOpen = false" class="cancel-btn">Annuler</button>
                     </div>
                 </form>
             </div>
-        </div>
-        <div class="team-form" v-show="isTeamFormOpen && userStore.currentProject.project && userStore.currentProject.team">
-            <button class="close-btn" @click="isTeamFormOpen = false">
-                <img src="../assets/icons/plus.png" alt="">
-            </button>
+        </div> </div>
+
+        <div class="modal-overlay" v-if="isTeamFormOpen && userStore.currentProject.project" @click.self="isTeamFormOpen = false">
+        <div class="team-form" >
+            <button class="close-btn" @click="isTeamFormOpen = false">&times;</button>
+            
             <div class="members-list">
-                <h2>Your team</h2>
-                <!-- Vérification plus robuste -->
-                <div v-if="!Array.isArray(userStore.currentProject.team) || userStore.currentProject.team.length === 0">
-                    <p>No member in the team...</p>
+                <h2>👥 Équipe du Projet</h2>
+                <div v-if="!userStore.currentProject.team?.length">
+                    <p class="empty-msg">Aucun membre assigné pour le moment.</p>
                 </div>
-                <div v-else>
-                    <div v-for="member in userStore.currentProject.team" 
-                        :key="member.collabRef" 
-                        class="member-item">
-                        <img :src="member.user?.profilePhotoUrl || '../assets/images/default-avatar.png'" 
-                            class="member-avatar">
+                <div v-else class="member-grid">
+                    <div v-for="member in userStore.currentProject.team" :key="member.collabref" class="member-item">
+                        <img :src="member.user?.profilephotourl || DefaultAvatar" class="member-avatar">
                         <div class="member-info">
-                            <p class="member-name">
-                                {{ member.user?.firstname || 'Unknown' }} 
-                                {{ member.user?.lastname || 'User' }}
-                            </p>
-                            <p class="member-role">{{ member.role || 'No role' }}</p>
+                            <p class="member-name">{{ member.user?.firstname }} {{ member.user?.lastname }}</p>
+                            <span class="role-tag">{{ member.role || 'Collaborateur' }}</span>
                         </div>
-                        <button class="remove-btn" @click="">Remove</button>
+                        <button class="remove-btn" @click="removeFromTeam(member.collabref)">✕</button>
                     </div>
                 </div>
             </div>
                 
-            <h2>Add a member</h2>
-            <div class="team-search-section">
-                <p>Invite members to join your team</p>
-                <input type="text" v-model="searchMember" placeHolder="Enter email address..." class="project-input" />
-                <button class="build-btn" @click="searchMemberByEmail(searchMember)">Search <div><img src="../assets/icons/search.png" alt=""></div></button>
-            </div>
-            <div class="member-research-result">
-                <div v-if="isMembersLoading" class="member-card">
-                    <Spinner/>
-                </div>
-                
-                <div v-else-if="foundMember" class="member-card">
-                    <img :src="foundMember.profilePhotoUrl || '../assets/images/default-avatar.png'" class="member-image">
-                    <div class="member-info">
-                        <h3>{{ foundMember.firstname }} {{ foundMember.lastname }}</h3> 
-                        <p>{{ foundMember.email }}</p>
-                    </div>
-                    <button class="invite-btn" @click="addToTeam(foundMember.email, userStore.currentProject.project.projectref)">
-                        Add to Team
-                    </button>
+            <div class="add-section">
+                <h2>🔍 Recruter un membre</h2>
+                <div class="team-search-section">
+                    <input type="email" v-model="searchMember" placeholder="Email de l'employé..." class="project-input" />
+                    <button class="build-btn" @click="searchMemberByEmail(searchMember)">Rechercher</button>
                 </div>
 
-                <div v-else-if="searchMember && !isMembersLoading" class="no-result">
-                    <p>No employee found with this email in your company.</p>
+                <div class="member-research-result">
+                    <Spinner v-if="isMembersLoading"/>
+                    
+                    <div v-else-if="foundMember" class="member-card">
+                        <img :src="foundMember.profilephotourl || DefaultAvatar" class="member-image">
+                        <div class="member-info">
+                            <h3>{{ foundMember.firstname }} {{ foundMember.lastname }}</h3> 
+                            <p>{{ foundMember.email }}</p>
+                            <select v-model="selectedRole" class="role-select">
+                                <option value="Member">Membre</option>
+                                <option value="Lead">Chef d'équipe</option>
+                                <option value="Expert">Expert Consultant</option>
+                            </select>
+                        </div>
+                        <button class="invite-btn" @click="addToTeam(userStore.currentProject.project.team[0].teamref, foundMember.email, selectedRole)">
+                            Ajouter au projet
+                        </button>
+                    </div>
+                    <p v-else-if="searchMember" class="no-result">Aucun employé trouvé.</p>
                 </div>
             </div>
-        </div>
+        </div></div>
         <Alert type="danger" action="error" v-if="errors"/>
         <Alert type="success" action="added" v-if="success"/>
     </section>
@@ -1483,7 +1604,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                 padding-bottom: 5px;
                                 cursor: pointer;
                                 margin-bottom: 0;
-                                &:hover{
+                                &:hover, &.active{
                                     border-bottom: 4px solid #505181;
                                 }
                             }
@@ -1905,6 +2026,8 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                             width: 100%;
                                             display: flex;
                                             justify-content: space-between;
+                                            align-items: center;
+                                            height: 50px;
                                             .elem{
                                                 width: 25%;
                                                 height: 30px;
@@ -2402,6 +2525,9 @@ const calculateTimeRemaining = (startDate, endDate) => {
                         transform: translateY(-1px);
                         box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
                     }
+                    &:disabled {
+                        background: #94a3b8;
+                    }
 
                     &:active {
                         transform: translateY(0);
@@ -2425,10 +2551,6 @@ const calculateTimeRemaining = (startDate, endDate) => {
             }
 
         .team-form {
-            position: fixed; /* Mieux que absolute pour les modales */
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -2620,18 +2742,198 @@ const calculateTimeRemaining = (startDate, endDate) => {
                     &:hover { background-color: #dbeafe; }
                 }
             }
-            }
+        }
 
-            /* Overlay pour assombrir l'arrière-plan */
-            .modal-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(15, 23, 42, 0.4);
-                backdrop-filter: blur(4px);
-                z-index: 99;
-            }
-    
+/* Overlay pour assombrir l'arrière-plan */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 200;
+}
+
+/* --- AJOUTS CIBLÉS SANS TOUCHER AU RESTE --- */
+
+/* Alignement des nouveaux KPIs financiers dans ton dashboard existant */
+.finance-kpi-bar {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.kpi-card {
+    flex: 1;
+    min-width: 180px;
+    background: #ffffff;
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid #50518183;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.kpi-card label {
+    display: block;
+    font-size: 0.7rem;
+    color: #505181;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.kpi-card .val {
+    font-size: 1.1rem;
+    font-weight: 800;
+}
+
+/* Couleurs de rentabilité */
+.text-green { color: #2ecc71 !important; }
+.text-red { color: #e74c3c !important; }
+
+/* Style pour le bloc de rapports dans l'onglet Activity */
+.report-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.report-form textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+
+.report-bubble {
+    background: #f8fafc;
+    border-left: 4px solid #004581;
+    padding: 12px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+/* Fix pour les input-groups dans tes modales existantes */
+.input-group {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+}
+
+.input-group label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #505181;
+}
+
+.input-group input, .input-group select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+/* Style du badge d'avancement dans les rapports */
+.badge {
+    font-size: 0.7rem;
+    background: #c2dff8;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: bold;
+}
+
+/* --- STRUCTURE DES GROUPES D'ENTRÉE --- */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 15px;
+    width: 100%;
+}
+
+.input-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #475569;
+    text-align: left;
+}
+
+/* Style uniforme pour tous les types d'inputs dans les modales */
+.input-group input, 
+.input-group select, 
+.input-group textarea {
+    padding: 10px 12px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    background: #ffffff;
+    width: 100%;
+    box-sizing: border-box; /* Important pour que le padding ne dépasse pas */
+}
+
+/* Effets de focus pour une meilleure UX */
+.input-group input:focus, 
+.input-group select:focus, 
+.input-group textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Gestion des lignes doubles (ex: Dates de début et fin côte à côte) */
+.form-row {
+    display: flex;
+    gap: 15px;
+    width: 100%;
+}
+
+.form-row .input-group {
+    flex: 1; /* Les deux colonnes prennent la même largeur */
+}
+
+/* Style spécifique pour le sélecteur de rôle dans la modale équipe */
+.role-select {
+    margin-top: 8px;
+    background-color: #f8fafc;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+/* Style pour les boutons d'action des formulaires */
+.btn-ctn {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: flex-end;
+}
+
+.submit-btn {
+    background-color: #004581;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.submit-btn:hover {
+    background-color: #003366;
+}
+
+.cancel-btn {
+    background-color: #f1f5f9;
+    color: #64748b;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
 </style>

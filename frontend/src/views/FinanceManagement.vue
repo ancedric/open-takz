@@ -3,7 +3,6 @@ import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import { Chart, registerables } from 'chart.js';
-import Header from '../components/Header.vue';
 
 Chart.register(...registerables);
 
@@ -238,7 +237,7 @@ const updateChart = async () => {
 };
 
 const exportToCSV = () => {
-  if (transactions.value.length === 0) return alert("Aucune donnée à exporter");
+  if (transactions.value.length === 0) return triggerToast("Aucune donnée à exporter", "error");
 
   // 1. Définir les entêtes du fichier
   const headers = ["Date", "Libelle", "Projet", "Categorie", "Montant (XAF)", "Reference"];
@@ -396,7 +395,7 @@ const saveInvoice = async () => {
 
   } catch (err) {
     console.error("Erreur lors de la création de la facture:", err);
-    alert("Impossible de créer la facture. Vérifiez votre connexion.");
+    triggerToast("Impossible de créer la facture. Vérifiez votre connexion.", "error");
   }
 };
 
@@ -421,7 +420,7 @@ const generateInvoicePDF = async (inv) => {
     .select('*')
     .eq('invoice_id', inv.invoice_id);
 
-  if (error) return alert("Erreur lors de la récupération des détails.");
+  if (error) return triggerToast("Erreur lors de la récupération des détails.", "error");
 
   const doc = new jsPDF();
   const company = userStore.user.company;
@@ -522,8 +521,8 @@ onMounted(async () => {
   <Transition name="toast">
     <div v-if="toast.show" :class="['toast-notification', toast.type]">
       <div class="toast-content">
-        <span v-if="toast.type === 'success'">✅</span>
-        <span v-else>⚠️</span>
+        <span v-if="toast.type === 'success'"><AppIcon name="CHECK" size="20" /></span>
+        <span v-else><AppIcon name="WARNING" size="20" /></span>
         <p>{{ toast.message }}</p>
       </div>
       <div class="toast-progress"></div>
@@ -532,10 +531,10 @@ onMounted(async () => {
   <div class="finance-page">
     <div class="tab-system">
       <button :class="{ active: activeTab === 'transactions' }" @click="activeTab = 'transactions'">
-        📜 Historique Cash
+        <AppIcon name="SCROLL" size="20" /> Historique Cash
       </button>
       <button :class="{ active: activeTab === 'invoices' }" @click="activeTab = 'invoices'">
-        🧾 Factures Clients
+        <AppIcon name="RECEIPT" size="20" /> Factures Clients
       </button>
     </div>
     <div v-if="activeTab === 'transactions'" class="table-container">
@@ -553,7 +552,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="header-actions">
-          <button @click="exportToCSV" class="btn-export">📥 Exporter (CSV)</button>
+          <button @click="exportToCSV" class="btn-export"><AppIcon name="IMPORT" size="20" /> Exporter (CSV)</button>
           <button @click="showModal = true" class="btn-primary">+ Ajouter un frais / budget</button>
         </div>
       </div>
@@ -569,7 +568,8 @@ onMounted(async () => {
           class="btn-lock" 
           :disabled="isClosing || (generateMonthlyReport && generateMonthlyReport.totalRevenue === 0)"
         >
-          <span>{{ isClosing ? '⏳' : '🔒' }}</span>
+          <AppIcon name="WAITING" size="20" v-if="isClosing" />
+          <AppIcon name="LOCK" size="20" v-else />
           Clôturer le mois définitivement
         </button>
       </div>
@@ -593,8 +593,8 @@ onMounted(async () => {
       </div>
       <section class="report-section card">
         <div class="report-header">
-          <h3>📊 Bilan de Performance Mensuel</h3>
-          <button @click="window.print()" class="btn-text">🖨️ Imprimer le rapport</button>
+          <h3><AppIcon name="REPORT" size="20" /> Bilan de Performance Mensuel</h3>
+          <button @click="window.print()" class="btn-text"><AppIcon name="PRINTER" size="20" /> Imprimer le rapport</button>
         </div>
 
         <div class="report-grid">
@@ -656,7 +656,7 @@ onMounted(async () => {
               <td>
                 <div style="display: flex; flex-direction: column;">
                   <span style="font-weight: 600;">{{ t.label }}</span>
-                  <small v-if="t.transaction_ref.startsWith('PAY-')" style="color: #6366f1;">💰 Paiement Salaire</small>
+                  <small v-if="t.transaction_ref.startsWith('PAY-')" style="color: #6366f1;"><AppIcon name="CASH" size="20" /> Paiement Salaire</small>
                 </div>
               </td>
               <td>
@@ -729,10 +729,10 @@ onMounted(async () => {
                 :disabled="isProcessing === inv.invoice_id"
               >
                 <span v-if="isProcessing === inv.invoice_id" class="loader-mini"></span>
-                <span v-else>✅ Payer</span>
+                <span v-else><AppIcon name="CHECK" size="20" /> Payer</span>
               </button>
               
-              <button @click="generateInvoicePDF(inv)" class="btn-icon">🖨️ PDF</button>
+              <button @click="generateInvoicePDF(inv)" class="btn-icon"><AppIcon name="PRINTER" size="20" /> PDF</button>
             </td>
           </tr>
         </tbody>

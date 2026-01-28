@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import { downloadPaySlip } from '../services/pdfGenerator'; 
-import Header from '../components/Header.vue';
+import AppIcon from '../components/AppIcon.vue';
 
 const userStore = useUserStore();
 const myPayroll = ref([]);
@@ -130,7 +130,7 @@ const handlePunch = async () => {
     }]).select().single();
     if (!error)attendanceRecord.value = data;
   } else {
-    if (attendanceRecord.value.check_out) return alert("Journée terminée.");
+    if (attendanceRecord.value.check_out) return triggerToast("Journée terminée!", "success");
     const { data, error } = await supabase.from('attendance')
       .update({ check_out: now.toISOString() })
       .eq('id', attendanceRecord.value.id)
@@ -150,11 +150,11 @@ onMounted(() => {
     <header class="portal-header card">
       <div class="header-main">
         <h1>Bienvenue, {{ userStore.user.user.firstname }}</h1>
-        <p class="job-title">🏢 {{ userStore.user.employe.position }} | {{ companyInfo?.companyname }}</p>
+        <p class="job-title"> <AppIcon name="COMPANY" size="20" /> {{ userStore.user.employe.position }} | {{ companyInfo?.companyname }}</p>
       </div>
       <div class="company-mini-details" v-if="companyInfo">
-        <span>📍 {{ companyInfo.address }}</span>
-        <span>📞 {{ companyInfo.phone }}</span>
+        <span> <AppIcon name="MAP_PIN" size="20" /> {{ companyInfo.address }}</span>
+        <span> <AppIcon name="PHONE" size="20" /> {{ companyInfo.phone }}</span>
       </div>
     </header>
 
@@ -166,14 +166,14 @@ onMounted(() => {
                 <p>{{ new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) }}</p>
             </div>
             <div class="punch-actions">
-                <button v-if="!attendanceRecord" @click="handlePunch" class="btn-punch in">📍 Arrivée</button>
-                <button v-else-if="!attendanceRecord.check_out" @click="handlePunch" class="btn-punch out">🚪 Départ</button>
-                <div v-else class="day-completed">✅ Journée terminée</div>
+                <button v-if="!attendanceRecord" @click="handlePunch" class="btn-punch in"> <AppIcon name="MAP_PIN" size="20" /> Arrivée</button>
+                <button v-else-if="!attendanceRecord.check_out" @click="handlePunch" class="btn-punch out"> <AppIcon name="LOCK" size="20" /> Départ</button>
+                <div v-else class="day-completed"> <AppIcon name="CHECK" size="20" /> Journée terminée</div>
             </div>
         </section>
 
         <section class="projects-section card">
-          <h3>🏗️ Mes Projets en cours</h3>
+          <h3><AppIcon name="PROJECTS" size="20" /> Mes Projets en cours</h3>
           <div class="project-list">
             <div v-for="proj in myProjects" :key="proj.id" class="mini-project-card">
               <div class="proj-header">
@@ -189,7 +189,7 @@ onMounted(() => {
           </div>
         </section>
         <section class="tasks-section card">
-          <h3>📋 Mes Missions & Alertes</h3>
+          <h3><AppIcon name="CLIPBOARD" size="20" /> Mes Missions & Alertes</h3>
           <div class="task-list">
             <div v-for="task in myTasks" :key="task.taskref" :class="['task-item', getTaskStatus(task)]">
               <div class="task-info">
@@ -197,7 +197,7 @@ onMounted(() => {
                 <small>{{ task.project?.projectname }}</small>
               </div>
               <div class="task-meta">
-                <span class="due-date">📅 {{ new Date(task.enddate).toLocaleDateString() }}</span>
+                <span class="due-date"><AppIcon name="CALENDAR" size="20" /> {{ new Date(task.enddate).toLocaleDateString() }}</span>
                 <div class="progress-bar-mini">
                   <div class="progress" :style="{width: task.progress + '%'}"></div>
                 </div>
@@ -237,7 +237,7 @@ onMounted(() => {
                 <tr v-for="pay in myPayroll.slice(0, 5)" :key="pay.id">
                   <td><strong>{{ pay.month }}</strong></td>
                   <td>{{ pay.net_salary.toLocaleString() }}</td>
-                  <td><button @click="downloadPaySlip(pay)" class="btn-pdf-icon">📥</button></td>
+                  <td><button @click="downloadPaySlip(pay)" class="btn-pdf-icon"><AppIcon name="IMPORT" size="20" /></button></td>
                 </tr>
               </tbody>
             </table>

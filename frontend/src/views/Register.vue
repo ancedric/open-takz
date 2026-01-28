@@ -235,13 +235,13 @@ const handleSubmit = async () => {
             email: userEmail.value,
             firstname: firstname.value,
             lastname: lastname.value,
-            phone: phone.value,     // Ajout de .value
-            country: country.value, // Ajout de .value
-            city: city.value,       // Ajout de .value
+            phone: phone.value,     
+            country: country.value,
+            city: city.value,      
             privilege: accountType.value === 'owner' ? 'owner' : 'employee'
           }
         ])
-        .select() // IMPORTANT pour récupérer userData après l'insert
+        .select() 
         .single();
 
       if (dbError) throw dbError;
@@ -265,7 +265,7 @@ const handleSubmit = async () => {
           if (accountType.value === 'owner') {
             router.push(`/create-company/${userData.userref}`);
           } else {
-            router.push(`/join-company/${userData.userref}`);
+            router.push(`/auth`);
           }
         }, 2000);
       }

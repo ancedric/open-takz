@@ -98,7 +98,7 @@ const burnRateAnalysis = computed(() => {
 
 const submitEntry = async () => {
   if (newEntry.value.amount <= 0 || !newEntry.value.label) {
-    return alert("Veuillez remplir correctement le libellé et le montant.");
+    return triggerToast("Veuillez remplir correctement le libellé et le montant.", "error");
   }
   
   // Logique automatique de catégorie selon le plan OHADA
@@ -123,7 +123,7 @@ const submitEntry = async () => {
     newEntry.value = { label: '', amount: 0, account_code: '601' };
     await fetchAccountingData();
   } else {
-    alert("Erreur lors de l'enregistrement : " + error.message);
+    triggerToast("Erreur lors de l'enregistrement : " + error.message, "error");
   }
 };
 
@@ -173,14 +173,14 @@ const performMonthlyClosing = async () => {
 
     if (error) throw error;
 
-    alert(`Le mois de ${selectedMonth.value} a été clôturé avec succès !`);
+    triggerToast(`Le mois de ${selectedMonth.value} a été clôturé avec succès !`, "success");
     
     // Générer un PDF ou imprimer le rapport ici
     window.print(); 
 
   } catch (err) {
     console.error("Erreur clôture:", err.message);
-    alert("Impossible de clôturer le mois.");
+    triggerToast("Impossible de clôturer le mois.", "error");
   } finally {
     isClosing.value = false;
   }
@@ -254,7 +254,7 @@ onMounted(fetchAccountingData);
         class="btn-close-month"
         :disabled="isClosing || transactions.length === 0"
       >
-        {{ isClosing ? 'Traitement...' : '🔒 Clôturer le mois' }}
+        {{ isClosing ? 'Traitement...' : 'Clôturer le mois' }}
       </button>
     </div>
     <div class="stats-grid">
@@ -282,7 +282,7 @@ onMounted(fetchAccountingData);
     </div>
     <div class="burn-rate-section card" v-if="massAnalysis.capital > 0">
       <div class="burn-header">
-        <h3>🔥 Analyse de Survie (Burn Rate)</h3>
+        <h3><AppIcon name="FIRE" size="20" /> Analyse de Survie (Burn Rate)</h3>
         <span class="runway-badge">Autonomie estimée : {{ burnRateAnalysis.runway }} mois</span>
       </div>
       
@@ -301,7 +301,7 @@ onMounted(fetchAccountingData);
       </div>
       
       <p v-if="burnRateAnalysis.isCritical" class="warning-msg">
-        ⚠️ Attention : Vous avez consommé plus de 80% de votre capital initial.
+        <AppIcon name="WARNING" size="20" /> Attention : Vous avez consommé plus de 80% de votre capital initial.
       </p>
     </div>
     <div class="accounting-grid">

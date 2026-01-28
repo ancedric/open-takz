@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import supabase from '../services/supabaseConfig.js'
 
 export const useUserStore = defineStore('user', () => {
+  console.log("Démarrage du store utilisateur");
   const user = ref(null);
     const isAuthenticated = ref(false);
     const isLoading = ref(true);
@@ -59,83 +60,67 @@ export const useUserStore = defineStore('user', () => {
 
 // Action pour charger TOUTES les données de tous les projets de l'utilisateur
     const getProjects = async (deptRef) => {
-      try {
-        if (!deptRef) {
-          console.warn('deptRef manquant.');
-          projects.value = [];
-          return;
-        }
-        // 1. Récupérer tous les projets liés à ce département
-        const { data: projectsData, error: projError } = await supabase
-          .from('project')
-          .select('*')
-          .eq('deptref', deptRef);
+      console.log("Démarrage du store utilisateur: récupération des projets");
+  try {
+    if (!deptRef) {
+      projects.value = [];
+      return;
+    }
 
-        if (projError) throw projError;
-        if (!projectsData || projectsData.length === 0) {
-          projects.value = [];
-          return;
-        }
+    // 1. On récupère le Projet + l'Équipe liée en UNE SEULE requête (Jointure)
+    const { data: projectsData, error: projError } = await supabase
+      .from('project')
+      .select(`
+        *,
+        team (
+          teamref,
+          role,
+          collaborator (
+            collabref,
+            role,
+            user:userref (*) 
+          )
+        )
+      `)
+      .eq('deptref', deptRef);
 
-        // 2. Pour chaque projet trouvé, on récupère les données liées (Tasks, Team, Assignments)
-        const detailedProjectsPromises = projectsData.map(async (project) => {
-          
-          // Récupération simultanée des tâches et de l'équipe pour ce projet
-          const [tasksRes, teamRes] = await Promise.all([
-            supabase.from('task').select('*').eq('projectref', project.projectref),
-            supabase.from('team').select('*').eq('projectref', project.projectref)
-          ]);
+    if (projError) throw projError;
 
-          const tasks = tasksRes.data || [];
-          const team = teamRes.data || [];
+    // 2. On récupère les tâches et assignations à part (plus simple pour le traitement)
+    const detailedProjects = await Promise.all(projectsData.map(async (proj) => {
+      
+      // Récupérer les tâches du projet
+      const { data: tasks } = await supabase
+        .from('task')
+        .select('*')
+        .eq('projectref', proj.projectref);
 
-          // 3. Récupérer les détails des utilisateurs de l'équipe
-          const teamWithUserDetails = await Promise.all(
-            team.map(async (member) => {
-              const { data: userData } = await supabase
-                .from('user')
-                .select('*')
-                .eq('userref', member.userref)
-                .single();
-              return { ...member, user: userData };
-            })
-          );
-
-          // 4. Récupérer les assignations pour toutes les tâches du projet
-          let allAssignments = [];
-          if (tasks.length > 0) {
-            const taskRefs = tasks.map(t => t.taskref);
-            const { data: assignmentsData } = await supabase
-              .from('assignments') // Vérifie l'orthographe "assignments" (tu avais "assisgnments")
-              .select('*')
-              .in('taskref', taskRefs);
-            
-            // Ajouter les infos utilisateurs aux assignations
-            allAssignments = await Promise.all(
-              (assignmentsData || []).map(async (ass) => {
-                const { data: userData } = await supabase
-                  .from('user')
-                  .select('*')
-                  .eq('userref', ass.userref)
-                  .single();
-                return { ...ass, user: userData };
-              })
-            );
-          }
-          
-          return {
-            project: project,
-            tasks: tasks,
-            team: teamWithUserDetails,
-            assignments: allAssignments
-          };
-        });
-
-        projects.value = await Promise.all(detailedProjectsPromises);
-      } catch (err) {
-        console.error('Erreur lors du chargement des projets du département:', err);
+      // Récupérer les assignations avec les infos users
+      let assignments = [];
+      if (tasks && tasks.length > 0) {
+        const { data: assData } = await supabase
+          .from('assignments')
+          .select(`*, user:userref (*)`)
+          .in('taskref', tasks.map(t => t.taskref));
+        assignments = assData || [];
       }
-    };
+
+      return {
+        project: proj,
+        tasks: tasks || [],
+        // On aplatit la structure pour que ton interface ne change pas
+        team: proj.team?.[0]?.collaborator || [], 
+        assignments: assignments
+      };
+    }));
+
+    projects.value = detailedProjects;
+
+        console.log("liste des projets: ", projects.value)
+  } catch (err) {
+    console.error('Erreur chargement projets:', err);
+  }
+};
 
     // Action pour définir le projet courant, sans appel API
     const setCurrentProject = (projectRef) => {

@@ -14,6 +14,8 @@ const registerdNumber = ref('');
 const companyEmail = ref('')
 const companyPhone = ref('')
 const companyCountry = ref(null)
+const companyAbout = ref('');
+const companyActivity = ref('');
 const loading = ref(false);
 const userref = router.currentRoute.value.params.userref;
 
@@ -58,7 +60,9 @@ const handleCreate = async () => {
         address: companyAddress.value,
         register_number: registerdNumber.value, 
         phone: companyPhone.value,
-        owner_ref: userref 
+        owner_ref: userref,
+        about: companyAbout.value,
+        activity: companyActivity.value 
       }]);
 
     if (compError) throw compError;
@@ -108,22 +112,62 @@ const handleCreate = async () => {
         <div class="label">Forme juridique</div>
         <select class="set-input" required v-model="legalForm">
           <option value="" disabled selected>>Choisissez une option</option>
-            <option value="ETS">ETS/EI</option>
-            <option value="SA">SA</option>
-            <option value="SARL">SARL</option>
-            <option value="SNC">SNC</option>
-            <option value="SCS">SCS</option>
-            <option value="SAS">SAS</option>
-            <option value="GIE">GIE</option>
-            <option value="EURL">EURL</option>
-            <option value="SASU">SASU</option>
-            <option value="SCI">SCI</option>
+          <option value="ETS">ETS/EI</option>
+          <option value="SA">SA</option>
+          <option value="SARL">SARL</option>
+          <option value="SNC">SNC</option>
+          <option value="SCS">SCS</option>
+          <option value="SAS">SAS</option>
+          <option value="GIE">GIE</option>
+          <option value="EURL">EURL</option>
+          <option value="SASU">SASU</option>
+          <option value="SCI">SCI</option>
+        </select>
+      </div>
+      <div class="input-ctn">
+        <div class="label">A propos</div>
+        <textarea v-model="companyAbout" class="set-input" placeholder="Décrivez votre entreprise"></textarea>
+      </div>
+      <div class="input-ctn">
+        <div class="label">Secteur 'activité'</div>
+        <select class="set-input" required v-model="companyActivity">
+          <option value="" disabled selected>>Choisissez une option</option>
+            <option value="Aéronautique & spatial">Aéronautique & spatial</option>
+            <option value="Agroalimentaire">Agroalimentaire</option>
+            <option value="Assurances">Assurances</option>
+            <option value="Automobile">Automobile</option>
+            <option value="Banque">Banque</option>
+            <option value="Bâtiment et construction">Bâtiment et construction</option>
+            <option value="Bien-être">Bien-être</option>
+            <option value="Commerce">Commerce</option>
+            <option value="Cosmétique">Cosmétique</option>
+            <option value="Education">Education</option>
+            <option value="Énergie">Énergie</option>
+            <option value="Entretien & nettoyage">Entretien & nettoyage</option>
+            <option value="Esthétique & soins corporels">Esthétique & soins corporels</option>
+            <option value="Finances & comptabilité">Finances & comptabilité</option>
+            <option value="Hôtellerie et Restauration">Hôtellerie et Restauration</option>
+            <option value="Industrie">Industrie</option>
+            <option value="Informatique & Services IT">Informatique & Services IT</option>
+            <option value="Juridique">Juridique</option>
+            <option value="Mines">Mines</option>
+            <option value="Pharmaceutique">Pharmaceutique</option>
+            <option value="Recherhe & développement">Recherhe & développement</option>
+            <option value="Ressources humaines">Ressources humaines</option>
+            <option value="Santé">Santé</option>
+            <option value="Sécurité">Sécurité</option>
+            <option value="Services">Services</option>
+            <option value="Services publics">Services publics</option>
+            <option value="Sport">Sport</option>
+            <option value="Télécommunictions">Télécommunictions</option>
+            <option value="Tourisme">Tourisme</option>
+            <option value="Transport">Transport</option>
           </select>
         </div>
-      <div class="input-ctn">
-        <div class="label">Country</div>
-        <select class="set-input" required v-model="companyCountry">
-          <option dvalue="" disabled selected>>Choisissez un pays</option>
+        <div class="input-ctn">
+          <div class="label">Country</div>
+          <select class="set-input" required v-model="companyCountry">
+            <option value="" disabled selected>>Choisissez un pays</option>
             <option value="Algeria">Algeria</option>
             <option value="Angola">Angola</option>
             <option value="Argentina">Argentina</option>
