@@ -30,6 +30,8 @@ import Dashboard from './views/Dashboard.vue'
 import ClosingArchives from './views/ClosingArchives.vue'
 import ModuleLayout from './Layout/ModuleLayout.vue'
 import Home from './views/Home.vue'
+import SuperAdmin from './views/SuperAdmin.vue'
+import ErrorPage from './views/ErrorPage.vue'
 
 const departments = ref([])
 
@@ -52,6 +54,12 @@ const routes = [
   { path: '/credits', component: Credits },
   { path: '/create-company/:userref', component: CreateCompany },
   { path: '/join-company/:userref', component: JoinCompany },
+
+  {
+    path: '/super-admin',
+    component: SuperAdmin,
+    meta: { requiresAuth: true, requiresAdmin: true } // Double sécurité
+  },
 
   {
     path: '/home',
@@ -138,6 +146,28 @@ const routes = [
       },
       { path: 'employe', component: EmployePortal }
     ]
+  },
+  {
+    path: '/403',
+    name: 'Forbidden',
+    component: ErrorPage,
+    props: { 
+      code: '403', 
+      title: 'Accès Réservé', 
+      message: "Halte-là ! Vous n'avez pas les permissions nécessaires pour accéder à cette zone sécurisée." 
+    }
+  },
+
+  // Route 404 (Attrape-tout)
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: ErrorPage,
+    props: { 
+      code: '404', 
+      title: 'Page Introuvable', 
+      message: "Cette page n'existe pas ou a été déplacée. Arrêtez de jouer avec l'URL !" 
+    }
   }
   
 ]
@@ -146,5 +176,37 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
 })
+
+router.beforeEach(async (to, from, next) => {
+  const userStore = useUserStore();
+
+  // 1. Vérifier si la route demande d'être Admin
+  if (to.matched.some(record => record.meta.requiresAdmin)) {
+    // Si l'utilisateur n'est pas connecté ou n'a pas le bon rôle
+    if (!userStore.user || userStore.user.user.privilege !== 'admin') {
+      return next('/403'); 
+    }
+  }
+
+  if (to.path === '/auth') return next();
+
+  // 2. On vérifie si l'utilisateur est connecté
+  if (!userStore.user) return next('/auth');
+
+  // 3. LOGIQUE D'ABONNEMENT
+  const expiryDateStr = userStore.user.company?.expiry_date;
+  
+  if (expiryDateStr) {
+    const today = new Date();
+    const expiryDate = new Date(expiryDateStr);
+
+    // Si expiré et qu'on n'est pas déjà sur la page d'erreur
+    if (today > expiryDate && to.path !== '/subscription-expired') {
+      return next('/subscription-expired');
+    }
+  }
+
+  next();
+});
 
 export default router

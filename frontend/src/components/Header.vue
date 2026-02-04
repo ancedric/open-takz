@@ -3,6 +3,11 @@
         <div class="title">
             <h1 @click="home">{{userStore.user.company?.companyname}}</h1>
         </div>
+        <div v-if="subscriptionStatus" class="subscription-badge" :class="subscriptionStatus.class">
+            <svg v-if="subscriptionStatus.class === 'urgent'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            {{ subscriptionStatus.label }}
+        </div>
+        <router-link class="super-admin-link" to="/super-admin" v-if="userStore.user.user.privilege === 'admin'">SuperAdmin</router-link>
         <div class="notifs">
             <Notifications />
             
@@ -37,7 +42,7 @@ import Spinner from './Spinner.vue'
 import Notifications from './Notifications.vue'
 import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useUserStore } from '../store/index'
 
 const userStore = useUserStore()
@@ -48,6 +53,23 @@ const home = () => {
     // Redirection vers le dashboard utilisateur
     router.push(`/home`)
 }
+
+const subscriptionStatus = computed(() => {
+  const expiryDateStr = userStore.user.company?.expiry_date;
+  if (!expiryDateStr) return null;
+
+  const today = new Date();
+  const expiry = new Date(expiryDateStr);
+  
+  // Calcul de la différence en jours
+  const diffInMs = expiry - today;
+  const diffInDays = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
+
+  if (diffInDays <= 0) return { label: 'Expiré', class: 'expired', days: 0 };
+  if (diffInDays <= 7) return { label: `Expire dans ${diffInDays}j`, class: 'urgent', days: diffInDays };
+  
+  return { label: 'Abonnement Actif', class: 'active', days: diffInDays };
+});
 
 const handleLogout = () => {
     try {
@@ -185,4 +207,56 @@ const handleLogout = () => {
             }
         }
     }
+
+    .subscription-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: 10rem;
+}
+
+/* État : Tout va bien (Vert discret) */
+.subscription-badge.active {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* État : Attention (Orange/Rouge clignotant ou fixe) */
+.subscription-badge.urgent {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  animation: pulse 2s infinite;
+}
+
+/* État : Bloqué */
+.subscription-badge.expired {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+.super-admin-link {
+  display: flex;
+  align-items: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+  margin-right: 20px;
+  cursor: pointer;
+}
 </style>

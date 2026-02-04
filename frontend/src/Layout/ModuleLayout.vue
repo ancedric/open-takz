@@ -4,6 +4,13 @@ import supabase from '../services/supabaseConfig.js'
 import { useRouter } from 'vue-router';
 import { ref, onMounted, computed } from 'vue';
 import Header from '../components/Header.vue'
+import FeedbackModal from '../components/FeedBack.vue';
+
+const feedbackRef = ref(null);
+
+const openFeedback = () => {
+  feedbackRef.value.open();
+};
 
 const userStore = useUserStore();
 const router = useRouter();
@@ -60,9 +67,15 @@ const logout = () => {
       <div class="sidebar-header">
         <h2 class="logo">OpenTask <span>v2.0</span></h2>
       </div>
-
+      
       <nav class="sidebar-nav">
         <div class="nav-section">
+
+          <button @click="openFeedback" class="nav-item logout-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"></path></svg>
+            Laisser un avis
+          </button>
+    
           <p class="section-title">Général</p>
           
           <router-link to="/home" class="nav-item">
@@ -138,6 +151,7 @@ const logout = () => {
       </section>
     </main>
   </div>
+  <FeedbackModal ref="feedbackRef" />
 </template>
 
 <style scoped>
