@@ -1,7 +1,7 @@
 <template>
     <div class="landing-page">
       <header>
-        <h1>OpenTaskz</h1>
+        <h1>Corevia</h1>
         <nav>
           <ul class="menu-list">
             <li><router-link to='/' class="menuLink">Features</router-link></li>
