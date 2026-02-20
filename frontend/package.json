@@ -23,7 +23,9 @@
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
+    "@originjs/vite-plugin-federation": "^1.4.1",
     "@vitejs/plugin-vue": "^5.1.4",
+    "supabase": "^2.75.2",
     "vite": "^5.4.8"
   }
 }

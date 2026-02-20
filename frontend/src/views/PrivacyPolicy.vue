@@ -6,7 +6,7 @@
       <div class="page-head"><h1>Users Conditions</h1></div>
         <router-link to="/">Home</router-link>
       <h1>Politique de Confidentialité</h1>
-      <p>OpenTask est engagé à protéger la confidentialité et la sécurité des informations personnelles de ses utilisateurs.</p>
+      <p>Corevia est engagé à protéger la confidentialité et la sécurité des informations personnelles de ses utilisateurs.</p>
       <h2>1. Collecte des informations</h2>
       <ul>
         <li>Nom et prénom</li>

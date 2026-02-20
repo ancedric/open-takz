@@ -31,6 +31,8 @@
     <nav class="admin-nav">
       <button @click="currentTab = 'renewals'" :class="{ active: currentTab === 'renewals' }">Abonnements</button>
       <button @click="currentTab = 'feedbacks'" :class="{ active: currentTab === 'feedbacks' }">Retours Utilisateurs</button>
+      <button @click="currentTab = 'companies'" :class="{ active: currentTab === 'companies' }">Entreprises</button>
+      <button @click="currentTab = 'newsletter'" :class="{ active: currentTab === 'newsletter' }">Marketing & News</button>
     </nav>
 
     <section v-if="currentTab === 'renewals'" class="tab-content">
@@ -59,7 +61,7 @@
       </table>
     </section>
 
-    <section v-else class="tab-content">
+    <section v-else-if="currentTab === 'feedbacks'" class="tab-content">
       <div class="feedback-grid">
         <div v-for="f in feedbacks" :key="f.id" class="feedback-card">
           <div class="card-header">
@@ -73,11 +75,79 @@
         </div>
       </div>
     </section>
+    <section v-else-if="currentTab === 'companies'" class="tab-content">
+      <div class="admin-section">
+        <div class="table-header">
+          <h2>Entreprises Partenaires ({{ companies.length }})</h2>
+          <input type="text" v-model="search" placeholder="Rechercher une entreprise..." />
+        </div>
+
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Entreprise</th>
+              <th>Créée le</th>
+              <th>Employés</th>
+              <th>Fin d'abonnement</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="comp in filteredCompanies" :key="comp.companyref">
+              <td>
+                <div class="comp-info">
+                  <span class="comp-name">{{ comp.name }}</span>
+                  <small>{{ comp.companyref }}</small>
+                </div>
+              </td>
+              <td>{{ formatDate(comp.created_at) }}</td>
+              <td>{{ comp.employe_count }}</td>
+              <td>
+                <span :class="getExpiryClass(comp.expiry_date)">
+                  {{ formatDate(comp.expiry_date) }}
+                </span>
+              </td>
+              <td>
+                <button @click="extendTrial(comp.companyref)" class="btn-tool">🎁 +3j</button>
+                <button @click="viewDetails(comp)" class="btn-tool">👁️ Détails</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section v-else>
+      <div class="newsletter-section">
+        <div class="card">
+          <div class="card-header">
+            <h3>📢 Diffuser une mise à jour</h3>
+            <p>Envoyez une annonce à toutes les entreprises enregistrées ({{ companies.length }} destinataires)</p>
+          </div>
+
+          <div class="form-group">
+            <label>Sujet de l'email</label>
+            <input v-model="emailForm.subject" placeholder="Ex: Nouveau module de stock disponible !" class="admin-input" />
+          </div>
+
+          <div class="form-group">
+            <label>Message (HTML supporté)</label>
+            <textarea v-model="emailForm.body" placeholder="Bonjour à tous, nous avons le plaisir de vous annoncer..." class="admin-textarea"></textarea>
+          </div>
+
+          <div class="admin-actions">
+            <button @click="sendToAll" :disabled="isSending" class="btn-primary">
+              <span v-if="!isSending">🚀 Envoyer la newsletter</span>
+              <span v-else>Envoi en cours...</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, reactive } from 'vue';
 import supabase from '../services/supabaseConfig';
 import AdminChart from '../components/AdminChart.vue';
 
@@ -85,6 +155,18 @@ const currentTab = ref('renewals');
 const pendingRenewals = ref([]);
 const feedbacks = ref([]);
 const onlineUsers = ref(0);
+const companies = ref([]);
+const search = ref('');
+const onlineUsersCount = ref(0);
+const onlineUsersList = ref([]); 
+
+const isSending = ref(false);
+const emailForm = reactive({
+  subject: '',
+  body: ''
+});
+
+let presenceChannel = null;
 
 const fetchData = async () => {
   // Récupérer les renouvellements en attente
@@ -114,10 +196,26 @@ const approve = async (id) => {
   }
 };
 
-const onlineUsersCount = ref(0);
-const onlineUsersList = ref([]); // Pour voir les noms des gens en ligne
+const fetchCompanies = async () => {
+  const { data } = await supabase
+    .from('company')
+    .select(`
+      *,
+      employe_count:employe(count)
+    `)
+    .order('createdat', { ascending: false });
+  
+  companies.value = data || [];
+};
 
-let presenceChannel = null;
+const extendTrial = async (ref) => {
+  // Petite fonction pour offrir 3 jours gratuitement directement depuis le dashboard
+  const { error } = await supabase.rpc('extend_company_subscription', { 
+    target_ref: ref, 
+    days_to_add: 3 
+  });
+  if(!error) fetchCompanies();
+};
 
 const setupRealtime = () => {
   // On crée un canal nommé 'opentask-online'
@@ -147,6 +245,72 @@ const setupRealtime = () => {
         });
       }
     });
+};
+
+const sendToAll = async () => {
+  if (!emailForm.subject || !emailForm.body) return alert("Champs vides !");
+  
+  isSending.value = true;
+  
+  // Construction du template HTML pro
+  const finalHtml = `
+    <!DOCTYPE html>
+    <html>
+      <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="padding: 20px 0;">
+              <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
+                <tr>
+                  <td style="background-color: #2563eb; padding: 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px;">OpenTask Update</h1>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 40px; color: #334155; line-height: 1.6; font-size: 16px;">
+                    <div style="margin-bottom: 20px;">
+                      ${emailForm.body.replace(/\n/g, '<br>')} 
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background-color: #f1f5f9; padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+                    <p style="margin: 0;">Vous recevez cet email car votre entreprise est enregistrée sur OpenTask.</p>
+                    <p style="margin: 5px 0 0 0;">&copy; 2026 OpenTask ERP - Tous droits réservés.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+
+  try {
+    const { data: companies } = await supabase.from('company').select('email');
+    const emailList = companies.map(c => c.email).filter(e => e);
+
+    // On envoie le HTML final au service
+    const { data, error } = await supabase.functions.invoke('send-bulk-email', {
+      body: { 
+        to: emailList, 
+        subject: emailForm.subject, 
+        html: finalHtml 
+      },
+      headers: {
+        // Cela transmet ton JWT (token) à la fonction pour prouver que tu es admin
+        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+      }
+    });
+
+    if (error) throw error;
+    alert("Newsletter envoyée avec succès !");
+  } catch (err) {
+    alert("Erreur : " + err.message);
+  } finally {
+    isSending.value = false;
+  }
 };
 
 onMounted(() => {

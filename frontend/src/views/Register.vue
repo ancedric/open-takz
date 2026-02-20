@@ -262,11 +262,11 @@ const handleSubmit = async () => {
 
         success.value = true;
         setTimeout(() => {
-          if (accountType.value === 'owner') {
+          /*if (accountType.value === 'owner') {
             router.push(`/create-company/${userData.userref}`);
-          } else {
+          } else {*/
             router.push(`/auth`);
-          }
+          //}
         }, 2000);
       }
     }

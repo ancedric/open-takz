@@ -6,7 +6,7 @@
         </div>
         
         <h1>Session Suspendue</h1>
-        <p class="subtitle">Votre période d'accès à <strong>OpenTask</strong> est arrivée à terme. Vos données sont en sécurité, mais l'accès aux modules est restreint.</p>
+        <p class="subtitle">Votre période d'accès à <strong>Corevia</strong> est arrivée à terme. Vos données sont en sécurité, mais l'accès aux modules est restreint.</p>
 
         <div class="plans-grid">
             <div class="plan-card">
@@ -54,13 +54,6 @@
 
     const userStore = useUserStore();
     const router = useRouter();
-
-    const requestRenewal = async (plan) => {
-    // Ici, tu pourrais rediriger vers une page de paiement 
-    // ou simplement ouvrir une modale pour uploader la preuve de virement (capture)
-    console.log(`Demande de renouvellement : ${plan}`);
-    // Redirection vers ton futur module de paiement ou formulaire de capture
-    };
 
     const fileInput = ref(null);
     const selectedPlan = ref(null);
@@ -174,7 +167,24 @@
         font-size: 16px;
         color: #64748b;
     }
-
+    .btn-primary {
+        background: #5a5cd4;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        width: 100%;
+    }
+    .btn-ghost {
+        background: #fa6060;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        width: 100%;
+    }
     .btn-gold {
         background: #f59e0b;
         color: white;

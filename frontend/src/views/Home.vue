@@ -357,7 +357,7 @@ onUnmounted(() => {
     </transition>
   <div class="job-board">
     <header class="board-header">
-      <h1>Opportunités de Carrière</h1>
+      <h1>Annonces </h1>
       <p>Rejoignez nos équipes et participez à nos prochains événements.</p>
       
       <div class="filters">
@@ -616,7 +616,7 @@ onUnmounted(() => {
                     
                     <div class="details-content">
                         <h4>Description {{jobDetails.type=== 'evenement' ? 'de l\'événement' : 'du poste'}}</h4>
-                        <p>{{ jobDetails?.description }}</p>
+                        <p v-html="jobDetails?.description.replace(/\n/g, '<br>')"></p>
                     </div>
                 </div>
                 <div class="job-cover" v-if="jobDetails.file_url" >
@@ -636,7 +636,7 @@ onUnmounted(() => {
 
             <div class="toast-content">
 
-                <img v-if="toast.type === 'success'" src="../assets/icons/check-circle.png" class="icon">
+                <img v-if="toast.type === 'success'" src="../assets/icons/check-96.png" class="icon">
 
                 <p>{{ toast.message }}</p>
 

@@ -65,12 +65,12 @@ const logout = () => {
 
     <aside :class="['sidebar', { 'is-open': isSidebarOpen }]">
       <div class="sidebar-header">
-        <h2 class="logo">OpenTask <span>v2.0</span></h2>
+        <h2 class="logo">Corevia <span>v2.0</span></h2>
       </div>
       
       <nav class="sidebar-nav">
         <div class="nav-section">
-
+          <router-link to="/create-company" class="nav-item">Créer une entreprise</router-link>
           <button @click="openFeedback" class="nav-item logout-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"></path></svg>
             Laisser un avis
@@ -96,6 +96,7 @@ const logout = () => {
 
         <div class="nav-section">
           <p class="section-title">Départements</p>
+          <router-link to="/openstorm" class="nav-item">OpenStorm</router-link>
           
           <router-link to="/home/hr" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner'">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>

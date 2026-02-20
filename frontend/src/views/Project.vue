@@ -757,7 +757,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                             <div>
                                 <h3>Description</h3>
                                 <p v-if="userStore.currentProject.project&& userStore.currentProject.project.description">
-                                    {{ userStore.currentProject.project.description }}
+                                    <span v-html="userStore.currentProject.project.description.replace(/\n/g, '<br>')"></span>
                                 </p>
                                 <p v-else>
                                     No Description provided

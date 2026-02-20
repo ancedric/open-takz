@@ -32,6 +32,7 @@ import ModuleLayout from './Layout/ModuleLayout.vue'
 import Home from './views/Home.vue'
 import SuperAdmin from './views/SuperAdmin.vue'
 import ErrorPage from './views/ErrorPage.vue'
+import SubscriptionExpired from './views/SubscriptionExpired.vue'
 
 const departments = ref([])
 
@@ -54,7 +55,8 @@ const routes = [
   { path: '/credits', component: Credits },
   { path: '/create-company/:userref', component: CreateCompany },
   { path: '/join-company/:userref', component: JoinCompany },
-
+  { path: '/subscription-expired', component: SubscriptionExpired },
+  
   {
     path: '/super-admin',
     component: SuperAdmin,

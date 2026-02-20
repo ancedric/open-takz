@@ -17,40 +17,102 @@ export const useUserStore = defineStore('user', () => {
         assignments: []
     });
 
-  const authenticate = (userData, employe, company) => {
-    user.value = {user: userData, employe, company}
-    isAuthenticated.value = true
-    localStorage.setItem('user', user)
-  }
+    const authenticate = async (userData, employe, company) => {
+    try {
+        // 1. On récupère les magasins de l'entreprise
+        const { data: stores, error } = await supabase
+            .from('inventory_stores')
+            .select('*')
+            .eq('companyref', company.ref) // On utilise la ref de la company
+            .eq('is_active', true);
+
+        if (error) throw error;
+
+        // 2. On injecte les magasins dans l'objet company
+        const companyWithStores = {
+            ...company,
+            stores: stores || [] // La clé 'stores' que React utilisera
+        };
+
+        // 3. On crée l'objet structuré global
+        const sessionData = { 
+            user: userData, 
+            employe: employe, 
+            company: companyWithStores 
+        };
+
+        user.value = sessionData;
+        isAuthenticated.value = true;
+        
+        // 4. On enregistre dans le localStorage
+        localStorage.setItem('user', JSON.stringify(sessionData));
+        
+        console.log("Session enregistrée avec les magasins:", sessionData);
+
+    } catch (err) {
+        console.error("Erreur lors de la récupération des magasins pendant l'auth:", err);
+        // On peut quand même authentifier sans magasins si besoin, ou bloquer
+    }
+};
 
   const init = async () => {
-    const _user = localStorage.getItem('user')
-    if (_user) {
-      try {
-        /*const response = await axios.get(`${import.meta.env.VITE_API_URL}/user`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })*/
-        const {data, error} = await supabase
+  const _sessionRaw = localStorage.getItem('user');
+  
+  if (_sessionRaw) {
+    try {
+      const session = JSON.parse(_sessionRaw);
+      
+      // 1. Vérification de l'utilisateur et récupération des données fraîches
+      // On utilise une jointure pour récupérer l'employé et la compagnie d'un coup
+      const { data, error } = await supabase
         .from('user')
-        .select('*')
-        .eq(_user.email)
-        .single()
+        .select(`
+          *,
+          employe (*),
+          company:companyref (*)
+        `)
+        .eq('email', session.user.email)
+        .single();
 
-        if (data) {
-          user.value = data
-          isAuthenticated.value = true
-        } else {
-          logout()
-        }
-      } catch (err) {
-        console.error('Erreur lors de la vérification du token:', err)
-        logout()
+      if (data && !error) {
+        // 2. On récupère les magasins de la compagnie récupérée
+        const { data: stores } = await supabase
+          .from('inventory_stores')
+          .select('*')
+          .eq('companyref', data.company.ref)
+          .eq('is_active', true);
+
+        // 3. On reconstruit l'objet session complet
+        const fullSession = {
+          user: { 
+            id: data.id, 
+            email: data.email, 
+            username: data.username, 
+            avatar_url: data.avatar_url 
+          },
+          employe: data.employe,
+          company: {
+            ...data.company,
+            stores: stores || [] // On ré-injecte les magasins ici
+          }
+        };
+
+        user.value = fullSession;
+        isAuthenticated.value = true;
+        
+        // On met à jour le localStorage avec les données fraîches
+        localStorage.setItem('user', JSON.stringify(fullSession));
+        
+      } else {
+        logout();
       }
+    } catch (err) {
+      console.error('Erreur lors de la restauration de la session:', err);
+      logout();
     }
-    isLoading.value = false
   }
+  isLoading.value = false;
+};
 
     const logout = () => {
         user.value = null;

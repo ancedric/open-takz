@@ -198,10 +198,19 @@ const fetchApplications = async () => {
 
     if (error) {
       console.error("Erreur applications:", error);
-      applications.value = [];
+      const enhancedApplications = data.map(async (app) => {
+        const { data: appData, error: appError} = await supabase
+          .from('employe')
+          .select('companyref')
+          .eq('email', app.email)
+          .maybeSingle();
+        
+        return { ...app, candidate_info: appData || null };
+      });
+      applications.value = enhancedApplications;
+    } else {
+      applications.value = data;
     }
-    applications.value = data;
-
 };
 
 const handlePayAll = async () => {
@@ -1309,13 +1318,16 @@ onMounted(() => {
                               </div>
                             </td>
                             <td>
-                                <span :class="['status-badge', app.status]">{{ app.status }}</span>
+                                <span class="status-badge unavailable" v-if="app.candidate_infos && app.candidate_infos !== userStore.user.employe.companyref">Plus disponible</span>
+                                <span v-else :class="['status-badge', app.status]">{{ app.status }}</span>
                             </td>
                             <td>
-                                <select @change="updateAppStatus(app, $event.target.value)" class="status-select" :disabled="(app.status === 'accepted' || app.status === 'rejected') && userStore.user.employe.privilege !== 'owner'">
-                                    <option value="pending">En attente</option>
-                                    <option value="accepted">Accepter</option>
-                                    <option value="rejected">Refuser</option>
+                                <select @change="updateAppStatus(app, $event.target.value)" class="status-select" 
+                                :disabled="((app.status === 'accepted' || app.status === 'rejected') && userStore.user.employe.privilege !== 'owner') 
+                                || (app.candidate_infos && app.candidate_infos !== userStore.user.employe.companyref)">
+                                    <option value="pending" :selected="app.status === 'pending'">En attente</option>
+                                    <option value="accepted" :selected="app.status === 'accepted'">Accepter</option>
+                                    <option value="rejected" :selected="app.status === 'rejected'">Refuser</option>
                                 </select>
                             </td>
                         </tr>
