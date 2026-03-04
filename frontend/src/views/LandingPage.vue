@@ -14,10 +14,10 @@
       <main>
         <section class="hero">
           <div class="left">
-            <div class="accroche">Revolutionize your productivity with <b>OpenTaskz</b></div>
+            <div class="accroche">Revolutionize your productivity with <b>Corevia</b></div>
             <div class="sub-text">
               <p>We empower your Business by keeping everyone accountable for their work<br>
-              Join thousands of professionals who trust OpenTaskz to manage their projects</p>
+              Join thousands of professionals who trust Corevia to manage their projects</p>
               <button @click="navigate" class="action">Get Started for Free</button>
             </div>
           </div>
@@ -33,7 +33,7 @@
                     <img src="../assets/icons/check-96.png" class="check">
                   </div>
                 </div>
-                  <p>The change begins HERE</p>
+                  <p>The heart of Enterprise</p>
               </div>
             </div>
           </div>
@@ -42,7 +42,7 @@
           <section class="features">
             <div class="feat-header">
               <h2>Manage your timeline with <br> unparalleled efficiency</h2>
-              <p>Experience the ultmate task management solution designed to suit all style of work, with an all-in-one tool that streamlines your workflow and simplifies your daily tasks.</p>
+              <p>Experience the ultmate company management solution designed to suit all style of work, with an all-in-one tool that streamlines your workflow and simplifies your daily tasks.</p>
             </div>
             <div class="feat-ctn">
               <div class="feat-card">
@@ -85,7 +85,7 @@
             <div>
               <div class="target-audience">
                 <div class="general">
-                  OpenTaskz is a CRM solution that can be adapted to suit the needs of any industry or business
+                  Corevia is an ERP solution that can be adapted to suit the needs of any industry or business
                 </div>
                 <div class="specific">
                   <ul>
@@ -107,7 +107,7 @@
             <div class="benefs">
               <div class="b-text">
                 <h3>This platform serve as the central location for all your work</h3>
-                <p>By using OpenTaskz, you can spend more time on team mangaement and less time on software-related tasks.</p>
+                <p>By using Corevia, you can spend more time on team mangaement and less time on software-related tasks.</p>
               </div>
               <div class="b-list">
                 <ul>
@@ -195,7 +195,7 @@
             </div>
           </div>
           <div class="footer-bottom">
-            <p>copyright© OpenTask, {{ currentYear }} All rights reserved</p>
+            <p>copyright© Corevia, {{ currentYear }} All rights reserved</p>
           </div>
         </footer>
       </main>

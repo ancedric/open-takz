@@ -101,7 +101,7 @@ const routes = [
             next('/home');
           }
         }
-       },
+      },
       { path: 'accounting', component: AccountingManagement,
         beforeEnter: (to, from, next) => {
           const userStore = useUserStore();
@@ -193,20 +193,21 @@ router.beforeEach(async (to, from, next) => {
   if (to.path === '/auth') return next();
 
   // 2. On vérifie si l'utilisateur est connecté
-  if (!userStore.user) return next('/auth');
+  //if (!userStore.user) return next('/auth');
 
   // 3. LOGIQUE D'ABONNEMENT
-  const expiryDateStr = userStore.user.company?.expiry_date;
+  if(userStore.user && userStore.user.company){
+    const expiryDateStr = userStore.user.company?.expiry_date;
   
-  if (expiryDateStr) {
-    const today = new Date();
-    const expiryDate = new Date(expiryDateStr);
+    if (expiryDateStr) {
+      const today = new Date();
+      const expiryDate = new Date(expiryDateStr);
 
-    // Si expiré et qu'on n'est pas déjà sur la page d'erreur
-    if (today > expiryDate && to.path !== '/subscription-expired') {
+      // Si expiré et qu'on n'est pas déjà sur la page d'erreur
+      if (today > expiryDate && to.path !== '/subscription-expired') {
       return next('/subscription-expired');
     }
-  }
+  }}
 
   next();
 });

@@ -93,18 +93,18 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="comp in filteredCompanies" :key="comp.companyref">
+            <tr v-for="comp in companies" :key="comp.companyref">
               <td>
                 <div class="comp-info">
-                  <span class="comp-name">{{ comp.name }}</span>
+                  <span class="comp-name">{{ comp.companyname }}</span>
                   <small>{{ comp.companyref }}</small>
                 </div>
               </td>
-              <td>{{ formatDate(comp.created_at) }}</td>
-              <td>{{ comp.employe_count }}</td>
+              <td>{{ comp.createdat }}</td>
+              <td>{{ comp.employe_count[0]?.count || 0 }}</td>
               <td>
-                <span :class="getExpiryClass(comp.expiry_date)">
-                  {{ formatDate(comp.expiry_date) }}
+                <span :class="comp.expiry_date">
+                  {{ comp.expiry_date }}
                 </span>
               </td>
               <td>
@@ -204,8 +204,9 @@ const fetchCompanies = async () => {
       employe_count:employe(count)
     `)
     .order('createdat', { ascending: false });
-  
+  console.log("Données des entreprises récupérées :", data);
   companies.value = data || [];
+  console.log(companies.value);
 };
 
 const extendTrial = async (ref) => {
@@ -315,6 +316,7 @@ const sendToAll = async () => {
 
 onMounted(() => {
     fetchData();
+    fetchCompanies()
     setupRealtime();
 });
 
