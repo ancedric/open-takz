@@ -1,7 +1,7 @@
 <template>
     <div class="landing-page">
       <header>
-        <h1>Corevia</h1>
+        <img src="../assets/images/logo-2.png" alt="Corevia Logo" class="logo">
         <nav>
           <ul class="menu-list">
             <li><router-link to='/' class="menuLink">Features</router-link></li>
@@ -234,16 +234,21 @@
       align-items: center;
       width: 100%;
       height: 50px;
-      background-color: #333;
+      background-color: #1e293b;
       color: #fff;
       padding: 10px;
       text-align: center;
       z-index: 100;
 
-      h1{
-        font-size: 1.5rem;
-        font-weight: bold;
-        margin: 0;
+      .logo{
+        width: 120px;
+        height: auto;
+        object-fit: contain;
+        margin-right: 20px;
+
+        @media (max-width: 400px){
+          width: 100px;
+        }
       }
 
       nav{

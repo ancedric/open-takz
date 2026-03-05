@@ -1,7 +1,8 @@
 <template>
     <div class="header-ctn">
         <div class="title">
-            <h1 @click="home">{{userStore.user.company?.companyname}}</h1>
+            <img :src="userStore.user.company?.logo || DefaultCompanyLogo" alt="Company Logo" class="company-logo">
+            <h3 @click="home">{{userStore.user.company?.companyname}}</h3>
         </div>
         <div v-if="subscriptionStatus" class="subscription-badge" :class="subscriptionStatus.class">
             <svg v-if="subscriptionStatus.class === 'urgent'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -9,8 +10,16 @@
         </div>
         <router-link class="super-admin-link" to="/super-admin" v-if="userStore.user.user.privilege === 'admin'">SuperAdmin</router-link>
         <div class="notifs">
-            <Notifications />
-            
+            <div class="launcher-wrapper">
+                <button class="launcher-btn" @click="isModuleLauncherOpen = !isModuleLauncherOpen" title="Modules">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                </button>
+                
+                <ModuleLauncher 
+                    v-if="isModuleLauncherOpen" 
+                    @close="isModuleLauncherOpen = false" 
+                />
+            </div>           
             <div v-if="!userStore.isLoading && userStore.user?.user" class="profile">
                 <div class="prof-img" @click="isAccountOpen = !isAccountOpen">
                     <img :src="userStore.user.user.profilephotourl || DefaultAvatar" :alt="userStore.user.user.firstname">
@@ -39,7 +48,8 @@
 
 <script setup>
 import Spinner from './Spinner.vue'
-import Notifications from './Notifications.vue'
+import ModuleLauncher from './ModuleLauncher.vue'
+import DefaultCompanyLogo from '../assets/images/company.png'
 import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router'
 import { ref, computed } from 'vue'
@@ -48,6 +58,7 @@ import { useUserStore } from '../store/index'
 const userStore = useUserStore()
 const router = useRouter()
 const isAccountOpen = ref(false)
+const isModuleLauncherOpen = ref(false)
 
 const home = () => {
     // Redirection vers le dashboard utilisateur
@@ -106,7 +117,14 @@ const handleLogout = () => {
                 padding-left: 0;
             }
 
-            h1{
+            .company-logo{
+                width: 30px;
+                height: 30px;
+                margin-right: 10px;
+                object-fit: cover;
+            }
+
+            h3{
                 color: #004581;
                 cursor: pointer;
             }
@@ -258,5 +276,27 @@ const handleLogout = () => {
   text-decoration: none;
   margin-right: 20px;
   cursor: pointer;
+}
+.launcher-btn {
+    background: none;
+    border: none;
+    color: #004581;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s;
+}
+
+.launcher-btn:hover {
+    background-color: rgba(0, 69, 129, 0.05);
+}
+
+.launcher-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
 }
 </style>

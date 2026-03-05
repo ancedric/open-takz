@@ -65,7 +65,9 @@ const logout = () => {
 
     <aside :class="['sidebar', { 'is-open': isSidebarOpen }]">
       <div class="sidebar-header">
-        <h2 class="logo">Corevia <span>v2.0</span></h2>
+        <div class="logo-ctn">
+          <img class="logo" src="../assets/images/logo-2.png" alt="Corevia Logo">
+        </div>
       </div>
       
       <nav class="sidebar-nav">
@@ -96,7 +98,6 @@ const logout = () => {
 
         <div class="nav-section">
           <p class="section-title">Départements</p>
-          <router-link to="/openstorm" class="nav-item">OpenStorm</router-link>
           
           <router-link to="/home/hr" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner'">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
@@ -174,9 +175,14 @@ const logout = () => {
   padding: 30px 20px;
   text-align: center;
 }
-
-.logo { font-size: 1.5rem; font-weight: bold; }
-.logo span { color: #3b82f6; font-size: 0.8rem; }
+.logo-ctn{
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  height: 40px;
+}
+.logo { display: block; margin: 0 auto 10px; width: 80px; height: auto; object-fit: cover; }
 
 .sidebar-nav { 
   flex: 1; 

@@ -77,17 +77,11 @@
     </section>
     <section v-else-if="currentTab === 'companies'" class="tab-content">
       <div class="admin-section">
-        <div class="table-header">
-          <h2>Entreprises Partenaires ({{ companies.length }})</h2>
-          <input type="text" v-model="search" placeholder="Rechercher une entreprise..." />
-        </div>
-
         <table class="admin-table">
           <thead>
             <tr>
               <th>Entreprise</th>
-              <th>Créée le</th>
-              <th>Employés</th>
+              <th>Modules Actifs</th> <th>Employés</th>
               <th>Fin d'abonnement</th>
               <th>Actions</th>
             </tr>
@@ -100,10 +94,24 @@
                   <small>{{ comp.companyref }}</small>
                 </div>
               </td>
-              <td>{{ comp.createdat }}</td>
+              
+              <td>
+                <div class="module-toggles">
+                  <label v-for="mod in ['inventory', 'hr', 'finance']" :key="mod" class="mod-pill" :class="{ active: comp.active_modules?.includes(mod) }">
+                    <input 
+                      type="checkbox" 
+                      :checked="comp.active_modules?.includes(mod)" 
+                      @change="toggleModule(comp, mod)"
+                      hidden
+                    />
+                    {{ mod === 'inventory' ? '📦 Stock' : mod === 'hr' ? '👥 RH' : '💰 Fin' }}
+                  </label>
+                </div>
+              </td>
+
               <td>{{ comp.employe_count[0]?.count || 0 }}</td>
               <td>
-                <span :class="comp.expiry_date">
+                <span :class="getExpiryClass(comp.expiry_date)">
                   {{ comp.expiry_date }}
                 </span>
               </td>
@@ -314,6 +322,42 @@ const sendToAll = async () => {
   }
 };
 
+const toggleModule = async (company, moduleName) => {
+  // On récupère la liste actuelle ou un tableau vide
+  let currentModules = company.active_modules || [];
+  
+  if (currentModules.includes(moduleName)) {
+    // Si déjà présent, on le retire
+    currentModules = currentModules.filter(m => m !== moduleName);
+  } else {
+    // Sinon, on l'ajoute
+    currentModules.push(moduleName);
+  }
+
+  // Mise à jour dans Supabase
+  const { error } = await supabase
+    .from('company')
+    .update({ active_modules: currentModules })
+    .eq('id', company.id);
+
+  if (!error) {
+    // Mise à jour locale pour éviter de recharger toute la liste
+    company.active_modules = currentModules;
+  } else {
+    alert("Erreur lors de la mise à jour des modules : " + error.message);
+  }
+};
+
+const getExpiryClass = (date) => {
+  // Ajoute ici ta logique de couleur pour les dates d'expiration
+  const today = new Date();
+  const expiry = new Date(date);
+  const diffInDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+  if (diffInDays < 0) return 'date-expired';
+  if (diffInDays < 30) return 'date-warning';
+  return 'date-normal';
+};
+
 onMounted(() => {
     fetchData();
     fetchCompanies()
@@ -407,5 +451,45 @@ onUnmounted(() => {
   0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
   70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.module-toggles {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.mod-pill {
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  border-radius: 20px;
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: pointer;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.mod-pill:hover {
+  border-color: #2563eb;
+}
+
+.mod-pill.active {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+  font-weight: 600;
+}
+.date-expired {
+  color: #ef4444;
+  font-weight: bold;
+}
+.date-warning {
+  color: #f59e0b;
+  font-weight: bold;
+}
+.date-normal {
+  color: #10b981;
 }
 </style>
