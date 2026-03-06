@@ -41,7 +41,7 @@
             id: 'inventory',
             name: 'Stocks & Ventes', 
             color: '#004581', 
-            link: `http://localhost:5174/${userStore.user.user.userref}`,
+            link: `http://corevia-store.netlify.app/${userStore.user.user.userref}`,
             icon: 'box' 
         },
         { 
