@@ -53,7 +53,6 @@ const routes = [
   { path: '/legalNotice', component: LegalNotice },
   { path: '/support', component: Support },
   { path: '/credits', component: Credits },
-  { path: '/create-company/:userref', component: CreateCompany },
   { path: '/join-company/:userref', component: JoinCompany },
   { path: '/subscription-expired', component: SubscriptionExpired },
   
@@ -68,6 +67,7 @@ const routes = [
     component: ModuleLayout,
     children: [
       { path: '', component: Home },
+      { path: 'create-company/:userref', component: CreateCompany },
       { path: 'dashboard', component: Dashboard },
       { path: 'profile', component: Profile },
       { 

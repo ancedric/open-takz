@@ -41,7 +41,7 @@
             id: 'inventory',
             name: 'Stocks & Ventes', 
             color: '#004581', 
-            link: `https://openstorm-ifs6.onrender.com/inventory/${userStore.user.user.id}`,
+            link: `http://localhost:5174/${userStore.user.user.userref}`,
             icon: 'box' 
         },
         { 

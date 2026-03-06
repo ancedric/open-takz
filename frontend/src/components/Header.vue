@@ -10,6 +10,10 @@
         </div>
         <router-link class="super-admin-link" to="/super-admin" v-if="userStore.user.user.privilege === 'admin'">SuperAdmin</router-link>
         <div class="notifs">
+            <div v-if="subscriptionStatus?.class === 'urgent'" class="alert-bell" @click="showExpiryModal = true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="bell-icon"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                <span class="notification-dot"></span>
+            </div>
             <div class="launcher-wrapper">
                 <button class="launcher-btn" @click="isModuleLauncherOpen = !isModuleLauncherOpen" title="Modules">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
@@ -59,6 +63,13 @@ const userStore = useUserStore()
 const router = useRouter()
 const isAccountOpen = ref(false)
 const isModuleLauncherOpen = ref(false)
+const showExpiryModal = ref(false);
+
+// Optionnel : Une fonction pour rediriger vers le paiement
+const goToBilling = () => {
+    showExpiryModal.value = false;
+    router.push('/home/billing'); // Ou ton lien de support
+};
 
 const home = () => {
     // Redirection vers le dashboard utilisateur
@@ -298,5 +309,42 @@ const handleLogout = () => {
     position: relative;
     display: flex;
     align-items: center;
+}
+
+.alert-bell {
+    position: relative;
+    cursor: pointer;
+    color: #f59e0b; /* Orange alerte */
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    animation: ring 4s ease-in-out infinite;
+}
+
+.notification-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    background-color: #ef4444;
+    border-radius: 50%;
+    border: 2px solid white;
+}
+
+@keyframes ring {
+    0% { transform: rotate(0); }
+    1% { transform: rotate(30deg); }
+    3% { transform: rotate(-28deg); }
+    5% { transform: rotate(34deg); }
+    7% { transform: rotate(-32deg); }
+    9% { transform: rotate(30deg); }
+    11% { transform: rotate(-28deg); }
+    13% { transform: rotate(0); }
+    100% { transform: rotate(0); }
+}
+
+.bell-icon:hover {
+    color: #d97706;
 }
 </style>
