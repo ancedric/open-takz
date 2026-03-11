@@ -153,6 +153,22 @@ const chartData = computed(() => ({
   }]
 }));
 
+const chartOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: window.innerWidth > 768, // On cache la légende sur petit mobile
+    }
+  },
+  scales: {
+    y: {
+      ticks: {
+        callback: (value) => value >= 1000 ? (value / 1000) + 'k' : value // Format 10k au lieu de 10000
+      }
+    }
+  }
+}));
 // IMPORTANT : Correction du onMounted (il manquait les parenthèses pour appeler la fonction)
 onMounted(() => {
   if (userStore.user.user.privilege !== 'owner' && 
@@ -191,7 +207,7 @@ onMounted(() => {
           <h3>Performance Financière</h3>
           <span class="badge-year">Année 2026</span>
         </div>
-        <Bar :data="chartData" :options="{ responsive: true, maintainAspectRatio: false }" style="max-height: 300px;" />
+        <Bar :data="chartData" :options="chartOptions" style="max-height: 300px;" />
       </div>
       
       <div class="recent-activity card">
@@ -236,16 +252,16 @@ onMounted(() => {
             </thead>
             <tbody>
                 <tr v-for="proj in projectsHealth" :key="proj.projectref">
-                    <td><strong>{{ proj.projectname }}</strong></td>
-                    <td>{{ proj.department.deptname }}</td>
-                    <td>
+                    <td data-label="Projet"><strong>{{ proj.projectname }}</strong></td>
+                    <td data-label="Département">{{ proj.department.deptname }}</td>
+                    <td data-label="Progression">
                         <div class="mini-progress-bar">
                             <div class="fill" :style="{ width: proj.progress + '%' }"></div>
                             <span>{{ proj.progress.toFixed(0) }}%</span>
                         </div>
                     </td>
-                    <td>{{ proj.budget.toLocaleString() }} XAF</td>
-                    <td>
+                    <td data-label="Budget (Tasks)">{{ proj.budget.toLocaleString() }} XAF</td>
+                    <td data-label="Santé">
                         <span :class="['status-dot', proj.progress < 50 ? 'warning' : 'healthy']"></span>
                         {{ proj.progress < 50 ? 'Critique' : 'Stable' }}
                     </td>
@@ -270,14 +286,14 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-for="t in recentTransactions" :key="t.id">
-              <td>
+              <td data-label="Désignation">
                 <div class="t-info">
                   <span class="t-label">{{ t.label }}</span>
                   <span class="t-date">{{ new Date(t.created_at).toLocaleDateString() }}</span>
                 </div>
               </td>
-              <td class="t-project">{{ t.project?.projectname || '---' }}</td>
-              <td :class="t.category === 'expense' ? 'text-red' : 'text-green'">
+              <td data-label="Projet" class="t-project">{{ t.project?.projectname || '---' }}</td>
+              <td data-label="Montant" :class="t.category === 'expense' ? 'text-red' : 'text-green'">
                 {{ t.category === 'expense' ? '-' : '+' }}{{ t.amount.toLocaleString() }}
               </td>
             </tr>
@@ -463,4 +479,88 @@ onMounted(() => {
 }
 .status-dot.healthy { background: #2ecc71; }
 .status-dot.warning { background: #e67e22; }
+/* --- RESPONSIVE ERP DASHBOARD --- */
+
+@media (max-width: 768px) {
+  .dashboard {
+    padding: 1rem;
+    padding-top: 20px; /* Moins d'espace en haut sur mobile */
+  }
+
+  /* 1. Stats Grid : 1 seule colonne pour éviter l'écrasement du texte XAF */
+  .grid-stats {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .stat-card .value {
+    font-size: 1.2rem; /* Légèrement plus petit pour éviter le débordement */
+  }
+
+  /* 2. Graphique : On force une hauteur pour qu'il ne disparaisse pas */
+  .chart-container {
+    padding: 1rem;
+    height: 350px; 
+  }
+
+  /* 3. TRANSFORMATION DES TABLEAUX EN CARTES (Projets & Transactions) */
+  /* On cache le header du tableau sur mobile */
+  .dash-table thead {
+    display: none;
+  }
+
+  .dash-table, .dash-table tbody, .dash-table tr, .dash-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .dash-table tr {
+    margin-bottom: 15px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  }
+
+  .dash-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 8px 5px;
+    text-align: right;
+  }
+
+  /* On ajoute des libellés dynamiques avant la donnée */
+  .dash-table td::before {
+    content: attr(data-label); /* Utilise l'attribut data-label qu'on va ajouter au HTML */
+    font-weight: 600;
+    color: #64748b;
+    font-size: 0.75rem;
+    text-align: left;
+  }
+
+  /* 4. KPI Grid Manager */
+  .manager-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* 5. Actions Rapides : Grid 2x2 pour mobile */
+  .quick-links {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  
+  .q-link {
+    font-size: 0.8rem;
+    padding: 15px 5px;
+  }
+}
 </style>

@@ -714,11 +714,11 @@ onMounted(async () => {
         </thead>
         <tbody>
           <tr v-for="inv in invoices" :key="inv.invoice_id">
-            <td>{{ inv.invoice_number }}</td>
-            <td>{{ inv.client_name }}</td>
-            <td>{{ inv.project?.projectname || 'H.P' }}</td>
-            <td class="text-green">{{ inv.total_ttc.toLocaleString() }} XAF</td>
-            <td>
+            <td data-label="N° Facture">{{ inv.invoice_number }}</td>
+            <td data-label="Client">{{ inv.client_name }}</td>
+            <td data-label="Projet">{{ inv.project?.projectname || 'H.P' }}</td>
+            <td data-label="Total TTC" class="text-green">{{ inv.total_ttc.toLocaleString() }} XAF</td>
+            <td data-label="Statut">
               <span :class="['badge', inv.status]">{{ inv.status }}</span>
             </td>
             <td>
@@ -1101,5 +1101,92 @@ onMounted(async () => {
 .btn-lock:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+/* --- ADAPTATION MOBILE FINANCES --- */
+@media (max-width: 768px) {
+  .finance-page { padding: 10px; }
+
+  /* 1. Stats en colonnes au lieu de lignes */
+  .stats-cards {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card { width: 100%; min-width: 0; }
+
+  /* 2. Cacher le graphique ou le réduire */
+  .finance-overview {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  .chart-container { height: 200px; }
+
+  /* 3. TRANSFORMATION DE LA TABLE EN CARTES */
+  /* C'est le secret pour ne pas avoir de scroll horizontal infini */
+  .finance-table thead { display: none; } /* On cache les entêtes */
+  
+  .finance-table tr {
+    display: block;
+    background: white;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: 1px solid #f1f5f9;
+  }
+
+  .finance-table td {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border: none;
+    text-align: right;
+  }
+
+  /* On ajoute des labels via pseudo-éléments pour compenser l'absence d'en-tête */
+  .finance-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #64748b;
+    float: left;
+    text-align: left;
+  }
+
+  /* 4. Actions d'en-tête (Boutons Ajouter/Exporter) */
+  .finance-header {
+    flex-direction: column;
+    gap: 15px;
+    padding-top: 20px;
+    align-items: stretch;
+  }
+  .header-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .report-grid {
+    grid-template-columns: 1fr; /* Une seule colonne */
+  }
+  
+  .report-column {
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 15px;
+  }
+
+  .report-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .item-row {
+    flex-direction: column;
+    background: #f8fafc;
+    padding: 10px;
+    border-radius: 8px;
+  }
+  .invoice-modal {
+    width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
 }
 </style>

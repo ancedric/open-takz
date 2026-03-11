@@ -392,33 +392,54 @@ onMounted(fetchAccountingData);
         </div>
       </div>
       <div v-if="loading" class="loader"><Spinner /></div>
-      
-      <table v-else class="finance-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Libellé</th>
-            <th>Projet</th>
-            <th>Catégorie</th>
-            <th>Montant</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in filteredTransactions" :key="item.id">
-            <td>{{ new Date(item.created_at) }}</td>
-            <td>{{ item.label }}</td>
-            <td>{{ item.project?.projectname || 'Hors projet' }}</td>
-            <td>
+      <div v-else>
+        <table class="finance-table desktop-only">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Libellé</th>
+              <th>Projet</th>
+              <th>Catégorie</th>
+              <th>Montant</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in filteredTransactions" :key="item.id">
+              <td>{{ new Date(item.created_at) }}</td>
+              <td>{{ item.label }}</td>
+              <td>{{ item.project?.projectname || 'Hors projet' }}</td>
+              <td>
+                <span :class="['badge', item.category]">
+                  {{ item.category === 'income' ? 'Revenu' : 'Dépense' }}
+                </span>
+              </td>
+              <td :class="item.category === 'income' ? 'text-success' : 'text-danger'">
+                <strong>{{ item.amount }} €</strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="mobile-emp-grid">
+          <div v-for="item in filteredTransactions" :key="item.id" class="emp-card-mobile">
+            <div class="card-header">
+              <span>{{ new Date(item.created_at) }}</span>
               <span :class="['badge', item.category]">
                 {{ item.category === 'income' ? 'Revenu' : 'Dépense' }}
               </span>
-            </td>
-            <td :class="item.category === 'income' ? 'text-success' : 'text-danger'">
-              <strong>{{ item.amount }} €</strong>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
+            <div class="card-body">
+              <h4>{{ item.label }}</h4>
+              <p>{{ item.project?.projectname || 'Hors projet' }}</p>
+            </div>
+            <div class="card-footer">
+              <strong :class="item.category === 'income' ? 'text-success' : 'text-danger'">
+                {{ item.amount }} XAF
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      
     </div>
   </div>
 </template>
@@ -709,5 +730,91 @@ onMounted(fetchAccountingData);
     .input-row.split {
         flex-direction: column;
     }
+}
+@media (max-width: 768px) {
+  .desktop-only{
+    display: none;
+  }
+  /* 1. Navigation par onglets (Filtres) */
+  .table-controls {
+    overflow-x: auto; /* Permet de scroller les boutons horizontalement */
+    white-space: nowrap;
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .filters {
+    display: flex;
+    gap: 8px;
+  }
+
+  .filters button {
+    padding: 8px 15px;
+    font-size: 0.85rem;
+    flex-shrink: 0; /* Empêche les boutons de rétrécir */
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr; /* Affichage en colonne pour mobile */
+  }
+  .stats-grid .stats-card {
+    margin-bottom: 1.5rem;
+  }
+  /* 2. Transformation de l'affichage des employés */
+  .emp-table, .emp-table thead {
+    display: none; /* On cache le tableau classique */
+  }
+
+  /* On crée une vue en grille de cartes pour mobile */
+  .mobile-emp-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+    margin-top: 20px;
+  }
+
+  .emp-card-mobile {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border: 1px solid #edf2f7;
+  }
+
+  .emp-header-mobile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .emp-details-mobile {
+    font-size: 0.9rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px dashed #e2e8f0;
+  }
+
+  /* 3. Zone de recherche/création */
+  .dept-creation-zone {
+    padding: 15px;
+  }
+
+  .dept-form {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dept-input {
+    width: 100%;
+  }
+
+  /* 4. Modale de paie mobile */
+  .pay-modal-content {
+    width: 95% !important;
+    padding: 15px;
+  }
 }
 </style>

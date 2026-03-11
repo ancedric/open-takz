@@ -692,7 +692,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                             :key="project.project.projectref"
                             class="projName"
                             :class="{ current: selectedProjectId === project.project.projectref }">
-                            <div class="data" @click="userStore.setCurrentProject(project.project.projectref)">
+                            <div class="data" @click="{userStore.setCurrentProject(project.project.projectref); open = !open}">
                                 {{ project.project.projectname }}
                                 <p class="project-desc">{{ project.project.projectdesc }}</p>
                             </div>
@@ -1293,10 +1293,6 @@ const calculateTimeRemaining = (startDate, endDate) => {
             padding: 20px;
             width: 25%;
 
-            @media (max-width: 768px) {
-                width: 100%;
-                margin-bottom: 20px;
-            }
 
             .search{
                 display: flex;
@@ -2935,5 +2931,137 @@ const calculateTimeRemaining = (startDate, endDate) => {
     border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
+}
+
+/* --- ADAPTATION MOBILE (< 768px) --- */
+@media (max-width: 768px) {
+    .project-page {
+        display: block; /* On casse le flex pour empiler les éléments */
+        overflow-x: hidden;
+    }
+
+    .project-sideBar {
+        position: absolute;
+        top: 0;
+        left:0;
+        width: 100%;
+        padding: 10px;
+        border-right: none;
+        border-bottom: 2px solid #eee;
+        background: #f9f9f9;
+    }
+
+    /* La liste des projets devient un ruban horizontal */
+    .collapse-elem ul {
+        display: flex;
+        overflow-x: auto;
+        gap: 10px;
+        padding: 10px 0;
+        list-style: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .projName {
+        flex: 0 0 200px; /* Largeur fixe pour chaque carte projet dans le ruban */
+        background: white;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+    }
+
+    .project-desc {
+        display: none; /* On cache la description longue pour gagner de la place */
+    }
+}
+@media (max-width: 768px) {
+    .proj-header {
+        padding: 10px;
+    }
+
+    .proj-title p {
+        font-size: 1.1rem;
+        font-weight: bold;
+    }
+
+    /* Menu horizontal scrollable */
+    .proj-menu ul {
+        display: flex;
+        overflow-x: auto;
+        gap: 5px;
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .proj-menu li {
+        padding: 8px 15px;
+        font-size: 13px;
+        white-space: nowrap; /* Empêche le texte de revenir à la ligne */
+        background: #f0f0f0;
+        border-radius: 20px;
+    }
+
+    .proj-menu li.active {
+        background: #2c3e50; /* Ton code couleur principal */
+        color: white;
+    }
+
+    /* Ajustement de l'équipe */
+    .proj-team .team {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .team-members img {
+        width: 30px;
+        height: 30px;
+    }
+}
+@media (max-width: 768px) {
+    .overview {
+        display: block; /* On empile tout */
+        padding: 15px;
+    }
+
+    .details, .estimations {
+        width: 100%;
+        margin-bottom: 20px;
+    }
+
+    .details div, .estimations div {
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px dashed #eee;
+    }
+
+    /* Adaptation des graphiques ou stats */
+    .project-stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* 2 colonnes seulement sur mobile */
+        gap: 10px;
+    }
+}
+@media (max-width: 768px) {
+    .overview {
+        display: block; /* On empile tout */
+        padding: 15px;
+    }
+
+    .details, .estimations {
+        width: 100%;
+        margin-bottom: 20px;
+    }
+
+    .details div, .estimations div {
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px dashed #eee;
+    }
+
+    /* Adaptation des graphiques ou stats */
+    .project-stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* 2 colonnes seulement sur mobile */
+        gap: 10px;
+    }
 }
 </style>

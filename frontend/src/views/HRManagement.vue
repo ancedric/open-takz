@@ -7,6 +7,7 @@ import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router';
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
+import ConfirmModal from '../components/ConfirmmModal.vue';
 
 
 const toast = ref({ show: false, message: '', type: 'success' });
@@ -461,8 +462,15 @@ const downloadPDF = (slip) => {
 
   doc.text(`Généré le: ${new Date().toLocaleDateString()}`, 20, doc.lastAutoTable.finalY + 20);
   
-  // Téléchargement
-  doc.save(`Fiche_Paie_${slip.employe.user.lastname}_${slip.month_year}.pdf`);
+  if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+    // Sur mobile, il est préférable d'ouvrir dans un nouvel onglet
+    const blob = doc.output('bloburl');
+    window.open(blob, '_blank');
+  } else {
+    // Téléchargement
+    doc.save(`Fiche_Paie_${slip.employe.user.lastname}_${slip.month_year}.pdf`);
+  }
+  
 };
 
 const handleSearchUser = async (email) => {
@@ -850,14 +858,22 @@ const fetchMonthlySummary = async () => {
 };
 
 watch(filterType, (newVal) => {
+  // Reset des états de recherche pour éviter les blocages visuels
+  userResult.value = null; 
+  newEmpEmail.value = '';
+  openEmpForm.value = false;
+
   if (newVal === 'attendances') {
     fetchAttendanceAndLeaves();
-  }
-  if (newVal === 'salaries') fetchPayslips();
     fetchMonthlySummary();
+  } else if (newVal === 'salaries') {
+    fetchPayslips();
+  } else if (newVal === 'recruitment') {
     fetchApplications();
+  } else if (newVal === 'employees') {
+    fetchData(); // On recharge les données fraîches
+  }
 });
-
 onMounted(() => {
   checkAccess();
   fetchData();
@@ -874,6 +890,33 @@ onMounted(() => {
         <div class="progress-bar"></div>
     </div>
   </transition>
+  <ConfirmModal 
+    :show="showPayConfirmModal" 
+    title="Confirmation de Paie"
+    confirmText="Valider le virement"
+    @close="showPayConfirmModal = false"
+    @confirm="validatePayroll(processingEmp)"
+  >
+    <div v-if="paySummary" class="pay-summary-box">
+      <p><strong>{{ paySummary.employee_name }}</strong></p>
+      <div class="summary-row">
+        <span>Salaire de Base:</span>
+        <span>{{ paySummary.base_salary?.toLocaleString() }} XAF</span>
+      </div>
+      <div class="summary-row text-red">
+        <span>Absences ({{ paySummary.missedDays }}j):</span>
+        <span>-{{ paySummary.absence_deduction?.toLocaleString() }} XAF</span>
+      </div>
+      <div class="summary-row text-red">
+        <span>CNPS (4.2%):</span>
+        <span>-{{ paySummary.social_charges?.toLocaleString() }} XAF</span>
+      </div>
+      <div class="summary-row total-row">
+        <span>NET À PAYER:</span>
+        <span class="text-green">{{ paySummary.netToPay?.toLocaleString() }} XAF</span>
+      </div>
+    </div>
+  </ConfirmModal>
   <div class="hr-page">
     <div class="hr-card">
       <div class="header">
@@ -906,7 +949,7 @@ onMounted(() => {
       </div>
 
       <div class="dept-creation-zone" v-if="userResult && filterType==='employees'">
-        <table class="emp-table">
+        <table class="emp-table desktop-only">
           <thead>
             <tr>
               <th>Prénom</th>
@@ -939,7 +982,7 @@ onMounted(() => {
         </table>
       </div>
 
-      <div class="dept-creation-zone" v-show="filterType === 'departments'">
+      <div class="dept-creation-zone" v-if="filterType === 'departments'">
         <h4>Ajouter un nouveau département</h4>
         <div class="dept-form">
           <input 
@@ -953,13 +996,13 @@ onMounted(() => {
           </button>
         </div>
       </div>
-      <div class="payroll-action-card" v-show="filterType === 'salaries' && upcomingPayments.length > 0">
+      <div class="payroll-action-card" v-if="filterType === 'salaries' && upcomingPayments.length > 0">
         <div class="month-selector">
           <label>Période de paie :</label>
           <input type="text" v-model="selectedMonth" placeholder="Ex: Janvier 2026">
         </div>
 
-        <table class="emp-table">
+        <table class="emp-table desktop-only">
           <thead>
             <tr>
               <th>Employé</th>
@@ -984,359 +1027,522 @@ onMounted(() => {
           </tbody>
         </table>
       </div>
-      <div v-if="loading" class="loader">Synchronisation avec la base de données...</div>
+      <div v-if="loading" class="loader">Synchronisation avec le serveur...</div>
       
-      <table v-else-if="filterType ==='employees'" class="emp-table">
-        <thead>
-          <tr>
-            <th>Collaborateur</th>
-            <th>Département</th>
-            <th>Rôle ERP</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="emp in employees" :key="emp.userref">
-            <td>
-              <div class="user-info">
-                <img :src="emp.user.profilephotourl || DefaultAvatar" class="avatar">
-                <div>
-                  <div class="name">{{ emp.user.firstname }} {{ emp.user.lastname }}</div>
-                  <div class="email">{{ emp.user.email }}</div>
+      <div v-if="filterType ==='employees'">
+        <table class="emp-table desktop-only">
+          <thead>
+            <tr>
+              <th>Collaborateur</th>
+              <th>Département</th>
+              <th>Rôle ERP</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="emp in employees" :key="emp.userref">
+              <td>
+                <div class="user-info">
+                  <img :src="emp.user.profilephotourl || DefaultAvatar" class="avatar">
+                  <div>
+                    <div class="name">{{ emp.user.firstname }} {{ emp.user.lastname }}</div>
+                    <div class="email">{{ emp.user.email }}</div>
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td>
-              <select v-model="emp.deptref" @change="updateDept(emp.user.userref, emp.deptref)" class="table-select">
-                <option value="" disabled selected>Aucun service</option>
-                <option v-for="d in departments" :key="d.deptref" :value="d.deptref">
-                  {{ d.deptname }}
-                </option>
-              </select>
-            </td>
-            <td>
-              <select 
-                v-model="emp.privilege" 
-                @change="updateRole(emp.userref, emp.privilege)"
-                :disabled="emp.userref === userStore.user.user.userref || emp.privilege === 'owner'"
-                class="table-select"
-              >
-                <option value="user">Employé</option>
-                <option value="admin">Manager</option>
-                <option value="hr">RH Manager</option>
-                <option value="owner">Propriétaire</option>
-              </select>
-            </td>
-            <td>
-              <button @click="openEmployeeFile(emp)" class="btn-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Dossier
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <table v-show="filterType ==='departments'" class="emp-table">
-        <thead>
-          <tr>
-            <th>Département</th>
-            <th>Responsable</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="dpt in departments" :key="dpt.deptref">
-            <td>
-              <div class="user-info">
-                <div>
-                  <div class="name">{{ dpt.deptname }}</div>
-                </div>
-              </div>
-            </td>
-            <td>  
-              <div class="user-info">
-                <select 
-                  v-model="dpt.manager_ref" 
-                  @change="updateManager(dpt.deptref, dpt.manager_ref)"
-                  class="table-select manager-select"
-                >
-                  <option value="" disabled>Sélectionner un responsable</option>
-                  <option v-for="emp in employees" :key="emp.user.userref" :value="emp.user.userref">
-                    {{ emp.user.firstname }} {{ emp.user.lastname }}
+              </td>
+              <td>
+                <select v-model="emp.deptref" @change="updateDept(emp.user.userref, emp.deptref)" class="table-select">
+                  <option value="" disabled selected>Aucun service</option>
+                  <option v-for="d in departments" :key="d.deptref" :value="d.deptref">
+                    {{ d.deptname }}
                   </option>
                 </select>
+              </td>
+              <td>
+                <select 
+                  v-model="emp.privilege" 
+                  @change="updateRole(emp.userref, emp.privilege)"
+                  :disabled="emp.userref === userStore.user.user.userref || emp.privilege === 'owner'"
+                  class="table-select"
+                >
+                  <option value="user">Employé</option>
+                  <option value="admin">Manager</option>
+                  <option value="hr">RH Manager</option>
+                  <option value="owner">Propriétaire</option>
+                </select>
+              </td>
+              <td>
+                <button @click="openEmployeeFile(emp)" class="btn-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Dossier
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="mobile-emp-grid">
+          <div v-for="emp in employees" :key="emp.id" class="emp-card-mobile">
+            <div class="emp-header-mobile">
+              <img :src="emp.user.profilephotourl || DefaultAvatar" class="avatar">
+              <div>
+                <div class="t-label">{{ emp.user.firstname }} {{ emp.user.lastname }}</div>
+                <div class="t-date">{{ emp.position }}</div>
               </div>
-            </td>
-            <td>
-              <router-link :to="dpt.deptname === 'Ressources humaines' ? 'hr' : dpt.deptname === 'Comptabilité' ?'accounting' : dpt.deptname === 'Finances' ? 'finance' : dpt.deptname === 'Marketing' ? 'crm': `${dpt.deptname}/${dpt.deptref}`" class="btn-icon">Voir</router-link>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-show="filterType === 'salaries'" class="salary-actions">
-        <div class="stats-mini">
-          <span>Total à payer : <strong>{{ payslips.reduce((acc, s) => acc + s.net_salary, 0).toLocaleString() }} XAF</strong></span>
-        </div>
-        <button 
-          @click="handlePayAll" 
-          :disabled="isProcessingPayment || payslips.filter(s => s.status === 'draft').length === 0"
-          class="btn-pay-all"
-        ><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          {{ isProcessingPayment ? 'Traitement...' : 'Tout marquer comme payé' }}
-        </button>
-        
-        <button @click="downloadPaySlip(report)" class="btn-download">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> Télécharger Bulletin
-        </button>
-      </div>
-      <table v-show="filterType === 'salaries'" class="emp-table">
-        <thead>
-          <tr>
-            <th>Collaborateur</th>
-            <th>Période</th>
-            <th>Salaire Brut</th>
-            <th>Net à payer</th>
-            <th>Statut</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="slip in payslips" :key="slip.payslip_id">
-            <td>
-              <div class="user-info">
-                <div class="name">{{ slip.employe.user.firstname }} {{ slip.employe.user.lastname }}</div>
+            </div>
+            
+            <div class="emp-details-mobile">
+              <div>
+                <span class="label">Salaire:</span><br>
+                <strong>{{ emp.salary.toLocaleString() }} XAF</strong>
               </div>
-            </td>
-            <td>{{ slip.month_year }}</td>
-            <td>{{ slip.gross_salary.toLocaleString() }} XAF</td>
-            <td style="font-weight: bold; color: #2ecc71;">{{ slip.net_salary.toLocaleString() }} XAF</td>
-            <td>
-              <span :class="'status-badge ' + slip.status">{{ slip.status }}</span>
-            </td>
-            <td>
-              <button @click="downloadPDF(slip)" class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 10 12 13 9 10"></polyline><line x1="12" y1="3" x2="12" y2="13"></line><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg> PDF</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="management-container" v-if="filterType==='attendances'">
-        <div class="quick-stats-bar">
-          <span class="badge present">{{ attendanceToday.length }} Présents</span>
-          <span class="badge pending">{{ pendingLeaves.length }} Congés en attente</span>
-        </div>
-
-        <section class="attendance-today">
-          <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg> Présences du jour ({{ new Date().toLocaleDateString() }})</h3>
-          <section class="monthly-overview card">
-            <div class="section-header">
-              <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg> Récapitulatif Mensuel ({{ selectedMonth }})</h3>
-              <small>Calculé automatiquement pour la préparation de la paie</small>
+              <div>
+                <span class="label">Dép:</span><br>
+                {{ emp.department?.deptname || 'N/A' }}
+              </div>
             </div>
 
-            <div class="summary-table-wrapper">
-              <table class="summary-table">
+            <div class="quick-actions-mobile" style="display: flex; gap: 5px; margin-top: 10px;">
+              <button @click="openPayModal(emp)" class="btn-pay-small">Payer</button>
+              <button @click="openEmployeeFile(emp)" class="btn-file-small">Dossier</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div v-if="filterType ==='departments'">
+        <table class="emp-table desktop-only">
+          <thead>
+            <tr>
+              <th>Département</th>
+              <th>Responsable</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="dpt in departments" :key="dpt.deptref">
+              <td>
+                <div class="user-info">
+                  <div>
+                    <div class="name">{{ dpt.deptname }}</div>
+                  </div>
+                </div>
+              </td>
+              <td>  
+                <div class="user-info">
+                  <select 
+                    v-model="dpt.manager_ref" 
+                    @change="updateManager(dpt.deptref, dpt.manager_ref)"
+                    class="table-select manager-select"
+                  >
+                    <option value="" disabled>Sélectionner un responsable</option>
+                    <option v-for="emp in employees" :key="emp.user.userref" :value="emp.user.userref">
+                      {{ emp.user.firstname }} {{ emp.user.lastname }}
+                    </option>
+                  </select>
+                </div>
+              </td>
+              <td>
+                <router-link :to="dpt.deptname === 'Ressources humaines' ? 'hr' : dpt.deptname === 'Comptabilité' ?'accounting' : dpt.deptname === 'Finances' ? 'finance' : dpt.deptname === 'Marketing' ? 'crm': `${dpt.deptname}/${dpt.deptref}`" class="btn-icon">Voir</router-link>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="mobile-emp-grid">
+          <div v-for="dpt in departments" :key="dpt.deptref" class="emp-card-mobile">
+            <div class="emp-header-mobile">
+              <div>
+                <div class="t-label">{{ dpt.deptname }}</div>
+                <div class="t-date">Responsable: {{ dpt.manager ? dpt.manager.user.firstname + ' ' + dpt.manager.user.lastname : 'N/A' }}</div>
+              </div>
+            </div>
+            
+            <router-link :to="dpt.deptname === 'Ressources humaines' ? 'hr' : dpt.deptname === 'Comptabilité' ?'accounting' : dpt.deptname === 'Finances' ? 'finance' : dpt.deptname === 'Marketing' ? 'crm': `${dpt.deptname}/${dpt.deptref}`" class="btn-view-small">Voir</router-link>
+          </div>  
+        </div>
+      </div>
+      
+      <div v-if="filterType === 'salaries'">
+        <div  class="salary-actions">
+          <div class="stats-mini">
+            <span>Total à payer : <strong>{{ payslips.reduce((acc, s) => acc + s.net_salary, 0).toLocaleString() }} XAF</strong></span>
+          </div>
+          <button 
+            @click="handlePayAll" 
+            :disabled="isProcessingPayment || payslips.filter(s => s.status === 'draft').length === 0"
+            class="btn-pay-all"
+          ><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            {{ isProcessingPayment ? 'Traitement...' : 'Tout marquer comme payé' }}
+          </button>
+          
+          <button @click="downloadPaySlip(report)" class="btn-download">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> Télécharger Bulletin
+          </button>
+        </div>
+        <table v-if="filterType === 'salaries'" class="emp-table desktop-only">
+          <thead>
+            <tr>
+              <th>Collaborateur</th>
+              <th>Période</th>
+              <th>Salaire Brut</th>
+              <th>Net à payer</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="slip in payslips" :key="slip.payslip_id">
+              <td>
+                <div class="user-info">
+                  <div class="name">{{ slip.employe.user.firstname }} {{ slip.employe.user.lastname }}</div>
+                </div>
+              </td>
+              <td>{{ slip.month_year }}</td>
+              <td>{{ slip.gross_salary.toLocaleString() }} XAF</td>
+              <td style="font-weight: bold; color: #2ecc71;">{{ slip.net_salary.toLocaleString() }} XAF</td>
+              <td>
+                <span :class="'status-badge ' + slip.status">{{ slip.status }}</span>
+              </td>
+              <td>
+                <button @click="downloadPDF(slip)" class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 10 12 13 9 10"></polyline><line x1="12" y1="3" x2="12" y2="13"></line><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg> PDF</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="mobile-emp-grid">
+          <div v-for="slip in payslips" :key="slip.payslip_id" class="emp-card-mobile">
+            <div class="emp-header-mobile">
+              <div>
+                <div class="t-label">{{ slip.employe.user.firstname }} {{ slip.employe.user.lastname }}</div>
+                <div class="t-date">Période: {{ slip.month_year }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div v-if="filterType==='attendances'">
+        <div class="management-container">
+          <div class="quick-stats-bar">
+            <span class="badge present">{{ attendanceToday.length }} Présents</span>
+            <span class="badge pending">{{ pendingLeaves.length }} Congés en attente</span>
+          </div>
+
+          <section class="attendance-today">
+            <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg> Présences du jour ({{ new Date().toLocaleDateString() }})</h3>
+            <section class="monthly-overview card">
+              <div class="section-header">
+                <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg> Récapitulatif Mensuel ({{ selectedMonth }})</h3>
+                <small>Calculé automatiquement pour la préparation de la paie</small>
+              </div>
+
+              <div class="summary-table-wrapper">
+                <table class="summary-table desktop-only">
+                  <thead>
+                    <tr>
+                      <th>Employé</th>
+                      <th>Jours Présents</th>
+                      <th>Retards</th>
+                      <th>Congés Payés</th>
+                      <th>Score Assiduité</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in monthlySummary" :key="item.name">
+                      <td><strong>{{ item.name }}</strong></td>
+                      <td>{{ item.presentDays }} j</td>
+                      <td>
+                        <span :class="item.lateCount > 3 ? 'text-danger fw-bold' : ''">
+                          {{ item.lateCount }}
+                        </span>
+                      </td>
+                      <td>{{ item.leaveDays }} j</td>
+                      <td>
+                        <div class="progress-bar">
+                          <div class="progress" :style="{ width: (item.presentDays * 5) + '%' }"></div>
+                        </div>
+                      </td>
+                      <td :class="{ 'warning-row': item.lateCount >= 3 }">
+                        {{ item.lateCount }}
+                        <span v-if="item.lateCount >= 3" title="Seuil de discipline atteint">⚠️<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div class="mobile-emp-grid">
+                  <div v-for="item in monthlySummary" :key="item.name" class="emp-card-mobile">
+                    <div class="emp-header-mobile">
+                      <div>
+                        <div class="t-label">{{ item.name }}</div>
+                        <div class="t-date">Période: {{ selectedMonth }}</div>
+                      </div>
+                    </div>
+                    <div class="emp-details-mobile">
+                      <div>
+                        <span class="label">Présent:</span><br>
+                        <strong>{{ item.presentDays }} j</strong>
+                      </div>
+                      <div>
+                        <span class="label">Retards:</span><br>
+                        <strong :class="item.lateCount > 3 ? 'text-danger fw-bold' : ''">{{ item.lateCount }}</strong>
+                      </div>
+                      <div>
+                        <span class="label">Congés:</span><br>
+                        <strong>{{ item.leaveDays }} j</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <div class="table-wrapper">
+              <table class="mini-table desktop-only">
                 <thead>
                   <tr>
                     <th>Employé</th>
-                    <th>Jours Présents</th>
-                    <th>Retards</th>
-                    <th>Congés Payés</th>
-                    <th>Score Assiduité</th>
+                    <th>Arrivée</th>
+                    <th>Statut</th>
+                    <th>Départ</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in monthlySummary" :key="item.name">
-                    <td><strong>{{ item.name }}</strong></td>
-                    <td>{{ item.presentDays }} j</td>
+                  <tr v-for="att in attendanceToday" :key="att.id">
+                    <td>{{ att.employe?.name }}</td>
+                    <td>{{ new Date(att.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</td>
                     <td>
-                      <span :class="item.lateCount > 3 ? 'text-danger fw-bold' : ''">
-                        {{ item.lateCount }}
-                      </span>
+                      <span :class="['status-dot', att.status]"></span>
+                      {{ att.status === 'retard' ? 'En retard' : 'À l\'heure' }}
                     </td>
-                    <td>{{ item.leaveDays }} j</td>
-                    <td>
-                      <div class="progress-bar">
-                        <div class="progress" :style="{ width: (item.presentDays * 5) + '%' }"></div>
-                      </div>
-                    </td>
-                    <td :class="{ 'warning-row': item.lateCount >= 3 }">
-                      {{ item.lateCount }}
-                      <span v-if="item.lateCount >= 3" title="Seuil de discipline atteint">⚠️<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
-                    </td>
+                    <td>{{ att.check_out ? new Date(att.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'En poste' }}</td>
+                  </tr>
+                  <tr v-if="attendanceToday.length === 0">
+                    <td colspan="4" class="empty-msg">Aucun pointage pour le moment aujourd'hui.</td>
                   </tr>
                 </tbody>
               </table>
+              <div class="mobile-emp-grid">
+                <div v-for="item in monthlySummary" :key="item.name" class="emp-card-mobile">
+                  <div class="emp-header-mobile">
+                    <div>
+                      <div class="t-label">{{ item.name }}</div>
+                      <div class="t-date">Période: {{ selectedMonth }}</div>
+                    </div>
+                  </div>
+                  <div class="emp-details-mobile">
+                    <div>
+                      <span class="label">Présent:</span><br>
+                      <strong>{{ item.presentDays }} j</strong>
+                    </div>
+                    <div>
+                      <span class="label">Retards:</span><br>
+                      <strong :class="item.lateCount > 3 ? 'text-danger fw-bold' : ''">{{ item.lateCount }}</strong>
+                    </div>
+                    <div>
+                      <span class="label">Congés:</span><br>
+                      <strong>{{ item.leaveDays }} j</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
-          <div class="table-wrapper">
-            <table class="mini-table">
-              <thead>
-                <tr>
-                  <th>Employé</th>
-                  <th>Arrivée</th>
-                  <th>Statut</th>
-                  <th>Départ</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="att in attendanceToday" :key="att.id">
-                  <td>{{ att.employe?.name }}</td>
-                  <td>{{ new Date(att.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</td>
-                  <td>
-                    <span :class="['status-dot', att.status]"></span>
-                    {{ att.status === 'retard' ? 'En retard' : 'À l\'heure' }}
-                  </td>
-                  <td>{{ att.check_out ? new Date(att.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'En poste' }}</td>
-                </tr>
-                <tr v-if="attendanceToday.length === 0">
-                  <td colspan="4" class="empty-msg">Aucun pointage pour le moment aujourd'hui.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
 
-        <section class="leave-validation">
-          <h3>⏳ Demandes de congés à valider</h3>
-          <div class="leaves-grid">
-            <div v-for="req in pendingLeaves" :key="req.id" class="leave-card">
-              <div class="leave-info">
-                <span class="emp-name">{{ req.employee_name }}</span>
-                <span class="leave-type">{{ req.type }}</span>
-                <p class="leave-dates">Du {{ req.start_date }} au {{ req.end_date }}</p>
-                <p class="leave-reason">"{{ req.reason }}"</p>
+          <section class="leave-validation">
+            <h3>⏳ Demandes de congés à valider</h3>
+            <div class="leaves-grid desktop-only">
+              <div v-for="req in pendingLeaves" :key="req.id" class="leave-card">
+                <div class="leave-info">
+                  <span class="emp-name">{{ req.employee_name }}</span>
+                  <span class="leave-type">{{ req.type }}</span>
+                  <p class="leave-dates">Du {{ req.start_date }} au {{ req.end_date }}</p>
+                  <p class="leave-reason">"{{ req.reason }}"</p>
+                </div>
+                <div class="actions">
+                  <button @click="updateLeaveStatus(req.id, 'approuvé')" class="btn-approve">Approuver</button>
+                  <button @click="updateLeaveStatus(req.id, 'refusé')" class="btn-reject">Refuser</button>
+                </div>
               </div>
-              <div class="actions">
-                <button @click="updateLeaveStatus(req.id, 'approuvé')" class="btn-approve">Approuver</button>
-                <button @click="updateLeaveStatus(req.id, 'refusé')" class="btn-reject">Refuser</button>
+              <div v-if="pendingLeaves.length === 0" class="empty-state">
+                Bravo ! Toutes les demandes sont traitées.
               </div>
             </div>
-            <div v-if="pendingLeaves.length === 0" class="empty-state">
-              Bravo ! Toutes les demandes sont traitées.
+            <div class="mobile-emp-grid">
+              <div v-for="req in pendingLeaves" :key="req.id" class="leave-card">
+                <div class="leave-info">
+                  <span class="emp-name">{{ req.employee_name }}</span>
+                  <span class="leave-type">{{ req.type }}</span>
+                  <p class="leave-dates">Du {{ req.start_date }} au {{ req.end_date }}</p>
+                  <p class="leave-reason">"{{ req.reason }}"</p>
+                </div>
+                <div class="actions">
+                  <button @click="updateLeaveStatus(req.id, 'approuvé')" class="btn-approve">Approuver</button>
+                  <button @click="updateLeaveStatus(req.id, 'refusé')" class="btn-reject">Refuser</button>
+                </div>
+              </div>
+              <div v-if="pendingLeaves.length === 0" class="empty-state">
+                Bravo ! Toutes les demandes sont traitées.
+              </div>
             </div>
-          </div>
-        </section>
-
-      </div>
-      <div class="recruitment-module" v-show="filterType === 'recruitment'">
-        <div class="main-ctn announce-form-section">
-            <div class="proj-header">
-                <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg> Publier une annonce</h3>
-                <p>Recrutement ou Événement d'entreprise</p>
-            </div>
-            
-            <form @submit.prevent="publishAnnounce" class="announce-form">
-                <div class="form-row">
-                    <div class="input-group">
-                        <label>Titre de l'annonce</label>
-                        <input type="text" v-model="newJob.title" placeholder="Ex: Développeur Fullstack" required>
-                    </div>
-                    <div class="input-group">
-                        <label>Type d'annonce</label>
-                        <select v-model="newJob.type">
-                            <option value="recrutement">Recrutement</option>
-                            <option value="evenement">Événement</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="input-group">
-                    <label>Description détaillée</label>
-                    <textarea v-model="newJob.description" placeholder="Missions, profil recherché, détails de l'événement..."></textarea>
-                </div>
-
-                <div class="form-row">
-                    <div class="input-group">
-                        <label>Lieu</label>
-                        <input type="text" v-model="newJob.location" placeholder="Ex: Douala, Hybride...">
-                    </div>
-                    <div class="input-group">
-                        <label>Date limite / Date de l'événement</label>
-                        <input type="date" v-model="newJob.deadline">
-                    </div>
-                </div>
-
-                <div class="input-group">
-                  <label>Document descriptif (Optionnel - PDF/Image)</label>
-                  <input type="file" @change="handleFileUpload" accept=".pdf,.jpg,.png,.docx" class="file-input">
-                  <progress v-if="uploadProgress > 0" :value="uploadProgress" max="100"></progress>
-                </div>
-                <div class="btn-ctn">
-                    <button type="submit" class="btn-add">Publier l'annonce</button>
-                </div>
-            </form>
+          </section>
         </div>
+      </div>
+      
+      <div v-if="filterType === 'recruitment'">
+        <div class="recruitment-module desktop-only">
+          <div class="main-ctn announce-form-section">
+              <div class="proj-header">
+                  <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg> Publier une annonce</h3>
+                  <p>Recrutement ou Événement d'entreprise</p>
+              </div>
+              
+              <form @submit.prevent="publishAnnounce" class="announce-form">
+                  <div class="form-row">
+                      <div class="input-group">
+                          <label>Titre de l'annonce</label>
+                          <input type="text" v-model="newJob.title" placeholder="Ex: Développeur Fullstack" required>
+                      </div>
+                      <div class="input-group">
+                          <label>Type d'annonce</label>
+                          <select v-model="newJob.type">
+                              <option value="recrutement">Recrutement</option>
+                              <option value="evenement">Événement</option>
+                          </select>
+                      </div>
+                  </div>
 
-        <div class="main-ctn applications-section">
-            <div class="proj-header">
-                <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> Candidatures & Réponses</h3>
+                  <div class="input-group">
+                      <label>Description détaillée</label>
+                      <textarea v-model="newJob.description" placeholder="Missions, profil recherché, détails de l'événement..."></textarea>
+                  </div>
+
+                  <div class="form-row">
+                      <div class="input-group">
+                          <label>Lieu</label>
+                          <input type="text" v-model="newJob.location" placeholder="Ex: Douala, Hybride...">
+                      </div>
+                      <div class="input-group">
+                          <label>Date limite / Date de l'événement</label>
+                          <input type="date" v-model="newJob.deadline">
+                      </div>
+                  </div>
+
+                  <div class="input-group">
+                    <label>Document descriptif (Optionnel - PDF/Image)</label>
+                    <input type="file" @change="handleFileUpload" accept=".pdf,.jpg,.png,.docx" class="file-input">
+                    <progress v-if="uploadProgress > 0" :value="uploadProgress" max="100"></progress>
+                  </div>
+                  <div class="btn-ctn">
+                      <button type="submit" class="btn-add">Publier l'annonce</button>
+                  </div>
+              </form>
+          </div>
+
+          <div class="main-ctn applications-section">
+              <div class="proj-header">
+                  <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> Candidatures & Réponses</h3>
+              </div>
+
+              <div class="table-container">
+                  <table class="emp-table desktop-only">
+                      <thead>
+                          <tr>
+                              <th>Candidat</th>
+                              <th>Poste visé</th>
+                              <th>Date</th>
+                              <th>CV / Document</th>
+                              <th>Statut</th>
+                              <th>Action</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          <tr v-for="app in applications" :key="app.appref">
+                              <td>
+                                <div class="user-info">
+                                  <div>
+                                    <div class="name">{{ app.firstname }} {{ app.lastname }}</div>
+                                    <div class="email">{{ app.email }}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <div class="user-info">  
+                                  <div>
+                                    <div class="name">{{ app.job?.title }}</div>
+                                  </div>
+                                </div></td>
+                              <td> 
+                                <div class="user-info">
+                                  <div>
+                                    <div class="name">{{ new Date(app.applied_at).toLocaleDateString() }}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <div v-if="app.resume_url" class="user-info">
+                                  <div>
+                                    <div class="name"><a  :href="app.resume_url" target="_blank" class="btn-view"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> Voir le CV</a> </div>
+                                  </div>
+                                  
+                                </div>
+                                <div v-else class="user-info">
+                                  <div class="name" x>Aucun document</div>
+                                </div>
+                              </td>
+                              <td>
+                                  <span class="status-badge unavailable" v-if="app.candidate_infos && app.candidate_infos !== userStore.user.employe.companyref">Plus disponible</span>
+                                  <span v-else :class="['status-badge', app.status]">{{ app.status }}</span>
+                              </td>
+                              <td>
+                                  <select @change="updateAppStatus(app, $event.target.value)" class="status-select" 
+                                  :disabled="((app.status === 'accepted' || app.status === 'rejected') && userStore.user.employe.privilege !== 'owner') 
+                                  || (app.candidate_infos && app.candidate_infos !== userStore.user.employe.companyref)">
+                                      <option value="pending" :selected="app.status === 'pending'">En attente</option>
+                                      <option value="accepted" :selected="app.status === 'accepted'">Accepter</option>
+                                      <option value="rejected" :selected="app.status === 'rejected'">Refuser</option>
+                                  </select>
+                              </td>
+                          </tr>
+                          <tr v-if="applications.length === 0">
+                              <td colspan="6" class="text-center">Aucune candidature reçue pour le moment.</td>
+                          </tr>
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+        </div>
+        <div class="mobile-emp-grid">
+          <div v-for="app in applications" :key="app.appref" class="emp-card-mobile">
+            <div class="emp-header-mobile">
+              <div>
+                <div class="t-label">{{ app.firstname }} {{ app.lastname }}</div>
+                <div class="t-date">Poste: {{ app.job?.title || 'N/A' }}</div>
+              </div>
+            </div>
+            <div class="emp-details-mobile">
+              <div>
+                <span class="label">Date de candidature:</span><br>
+                <strong>{{ new Date(app.applied_at).toLocaleDateString() }}</strong>
+              </div>
+              <div v-if="app.resume_url">
+                <a :href="app.resume_url" target="_blank" class="btn-view-small"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> Voir le CV</a>
+              </div>
+              <div v-else>
+                <span class="label">CV:</span><br>
+                <strong>Aucun document</strong>
+              </div>
+              <div style="margin-top:10px;">
+                <span class="label">Statut:</span><br>
+                <strong :class="'status-badge ' + app.status">{{ app.status }}</strong>
+              </div>
             </div>
 
-            <div class="table-container">
-                <table class="emp-table">
-                    <thead>
-                        <tr>
-                            <th>Candidat</th>
-                            <th>Poste visé</th>
-                            <th>Date</th>
-                            <th>CV / Document</th>
-                            <th>Statut</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="app in applications" :key="app.appref">
-                            <td>
-                              <div class="user-info">
-                                <div>
-                                  <div class="name">{{ app.firstname }} {{ app.lastname }}</div>
-                                  <div class="email">{{ app.email }}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <div class="user-info">  
-                                <div>
-                                  <div class="name">{{ app.job?.title }}</div>
-                                </div>
-                              </div></td>
-                            <td> 
-                              <div class="user-info">
-                                <div>
-                                  <div class="name">{{ new Date(app.applied_at).toLocaleDateString() }}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <div v-if="app.resume_url" class="user-info">
-                                <div>
-                                  <div class="name"><a  :href="app.resume_url" target="_blank" class="btn-view"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> Voir le CV</a> </div>
-                                </div>
-                                
-                              </div>
-                              <div v-else class="user-info">
-                                <div class="name" x>Aucun document</div>
-                              </div>
-                            </td>
-                            <td>
-                                <span class="status-badge unavailable" v-if="app.candidate_infos && app.candidate_infos !== userStore.user.employe.companyref">Plus disponible</span>
-                                <span v-else :class="['status-badge', app.status]">{{ app.status }}</span>
-                            </td>
-                            <td>
-                                <select @change="updateAppStatus(app, $event.target.value)" class="status-select" 
-                                :disabled="((app.status === 'accepted' || app.status === 'rejected') && userStore.user.employe.privilege !== 'owner') 
-                                || (app.candidate_infos && app.candidate_infos !== userStore.user.employe.companyref)">
-                                    <option value="pending" :selected="app.status === 'pending'">En attente</option>
-                                    <option value="accepted" :selected="app.status === 'accepted'">Accepter</option>
-                                    <option value="rejected" :selected="app.status === 'rejected'">Refuser</option>
-                                </select>
-                            </td>
-                        </tr>
-                        <tr v-if="applications.length === 0">
-                            <td colspan="6" class="text-center">Aucune candidature reçue pour le moment.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <select @change="updateAppStatus(app, $event.target.value)" class="status-select-small" 
+            :disabled="((app.status === 'accepted' || app.status === 'rejected') && userStore.user.employe.privilege !== 'owner') 
+            || (app.candidate_infos && app.candidate_infos !== userStore.user.employe.companyref)">
+                <option value="pending" :selected="app.status === 'pending'">En attente</option>
+                <option value="accepted" :selected="app.status === 'accepted'">Accepter</option>
+                <option value="rejected" :selected="app.status === 'rejected'">Refuser</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -2092,4 +2298,86 @@ onMounted(() => {
     transform: translateX(100%);
     opacity: 0;
 }
+
+@media (max-width: 768px) {
+  .desktop-only{
+    display: none;
+  }
+  /* 1. Navigation par onglets (Filtres) */
+  .table-controls {
+    overflow-x: auto; /* Permet de scroller les boutons horizontalement */
+    white-space: nowrap;
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .filters {
+    display: flex;
+    gap: 8px;
+  }
+
+  .filters button {
+    padding: 8px 15px;
+    font-size: 0.85rem;
+    flex-shrink: 0; /* Empêche les boutons de rétrécir */
+  }
+
+  /* 2. Transformation de l'affichage des employés */
+  .emp-table, .emp-table thead {
+    display: none; /* On cache le tableau classique */
+  }
+
+  /* On crée une vue en grille de cartes pour mobile */
+  .mobile-emp-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+    margin-top: 20px;
+  }
+
+  .emp-card-mobile {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border: 1px solid #edf2f7;
+  }
+
+  .emp-header-mobile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .emp-details-mobile {
+    font-size: 0.9rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px dashed #e2e8f0;
+  }
+
+  /* 3. Zone de recherche/création */
+  .dept-creation-zone {
+    padding: 15px;
+  }
+
+  .dept-form {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dept-input {
+    width: 100%;
+  }
+
+  /* 4. Modale de paie mobile */
+  .pay-modal-content {
+    width: 95% !important;
+    padding: 15px;
+  }
+}
+
 </style>

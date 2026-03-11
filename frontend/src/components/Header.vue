@@ -347,4 +347,79 @@ const handleLogout = () => {
 .bell-icon:hover {
     color: #d97706;
 }
+/* --- ADAPTATION MOBILE DU HEADER --- */
+@media (max-width: 768px) {
+    .header-ctn {
+        gap: 10px; /* On réduit l'espace énorme du desktop */
+        height: auto;
+        min-height: 60px;
+        padding: 5px 10px;
+        align-items: center;
+    }
+
+    .header-ctn .title {
+        width: auto; /* On laisse le logo prendre sa place naturelle */
+        padding-left: 0;
+    }
+
+    /* On cache le nom de l'entreprise si l'écran est vraiment petit ou on réduit sa taille */
+    .header-ctn .title h3 {
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100px;
+    }
+
+    /* Le badge d'abonnement doit être plus compact */
+    .subscription-badge {
+        width: auto; /* On annule le 10rem */
+        padding: 4px 8px;
+        font-size: 0.45rem;
+        order: 2; /* On peut le réorganiser si besoin */
+    }
+
+    /* Zone des notifications et profil */
+    .header-ctn .notifs {
+        width: auto;
+        flex: 1;
+        justify-content: flex-end;
+        gap: 12px;
+    }
+
+    /* On s'assure que le profil ne prend pas trop de place */
+    .header-ctn .profile {
+        width: auto;
+        gap: 0;
+    }
+
+    /* Le menu de compte (dropdown) */
+    .header-ctn .notifs .account {
+        position: fixed; /* On passe en fixed pour éviter les problèmes de overflow */
+        left: auto;
+        right: 10px;
+        top: 60px;
+        width: 220px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+
+    /* Lien SuperAdmin discret */
+    .super-admin-link {
+        font-size: 0.7rem;
+        margin-right: 5px;
+    }
+
+    /* Ajustement des icônes SVG pour le tactile */
+    .launcher-btn svg, .alert-bell svg {
+        width: 22px;
+        height: 22px;
+    }
+}
+
+/* Optionnel : cacher le badge sur les très petits écrans (< 400px) pour éviter le chevauchement */
+@media (max-width: 400px) {
+    .subscription-badge {
+        display: none;
+    }
+}
 </style>
