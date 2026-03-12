@@ -259,7 +259,7 @@ const handleCreate = async () => {
   </div>
 </template>
 <style scoped>
-.page.setup-ctn {
+/*.page.setup-ctn {
   justify-content: center;
   align-items: center;
 
@@ -336,6 +336,138 @@ const handleCreate = async () => {
         font-weight: 600;
         cursor: pointer;
         margin-top: 10px;
+    }
+}*/
+
+.page.setup-ctn {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start; /* Permet le scroll naturel si le formulaire est long */
+    min-height: 100vh;
+    padding: 20px 0;
+    background-color: #f8f9fa; /* Léger fond pour détacher le formulaire */
+}
+
+.auth-ctn {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 600px; /* Plus étroit pour une meilleure lecture */
+    margin: 0 auto;
+    padding: 30px 20px;
+    background-color: #fff;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    box-sizing: border-box;
+}
+
+/* Titre du formulaire */
+h3 {
+    color: #2a2f4f;
+    margin-bottom: 30px;
+    text-align: center;
+    font-family: 'Poppins', sans-serif;
+}
+
+/* Conteneur de chaque champ */
+.input-ctn {
+    width: 100%;
+    margin-bottom: 25px; /* Espace entre les blocs */
+    position: relative;
+}
+
+/* Style commun pour Inputs, Selects et Textarea */
+.auth-ctn .set-input {
+    height: 50px;
+    width: 100%;
+    border-radius: 10px;
+    background-color: transparent;
+    color: #2a2f4f;
+    padding: 0 15px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 1rem;
+    border: 1px solid #9da6e0;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+/* Spécificité pour le Textarea */
+textarea.set-input {
+    height: 100px;
+    padding: 15px;
+    resize: vertical;
+}
+
+/* Focus state */
+.auth-ctn .set-input:focus {
+    border-color: #2a2f4f;
+    border-width: 2px;
+}
+
+/* Le Label flottant */
+.input-ctn .label {
+    position: absolute;
+    top: -10px;
+    left: 15px;
+    font-size: 0.75rem;
+    background-color: #fff;
+    padding: 0 5px;
+    z-index: 1;
+    color: #9da6e0;
+    font-weight: 500;
+}
+
+/* Bouton d'action */
+.auth-btn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 50px;
+    width: 100%;
+    max-width: 280px;
+    border: none;
+    border-radius: 12px;
+    background-color: #2a2f4f;
+    color: #eee;
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    margin-top: 20px;
+    box-shadow: 0 4px 15px rgba(42, 47, 79, 0.2);
+}
+
+.auth-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* --- RESPONSIVE MOBILE (< 860px) --- */
+@media screen and (max-width: 860px) {
+    .auth-ctn {
+        width: 95%;
+        margin-left: 0;
+        transform: none; /* Supprime le décalage desktop */
+        padding: 20px 15px;
+        border-radius: 0; /* Full width sur mobile */
+        box-shadow: none;
+        border: none;
+    }
+
+    .input-ctn {
+        margin-bottom: 20px;
+    }
+
+    .auth-btn {
+        max-width: 100%; /* Bouton large sur mobile pour le pouce */
+    }
+
+    h3 {
+        font-size: 1.2rem;
+        margin-bottom: 20px;
     }
 }
 </style>

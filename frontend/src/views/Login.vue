@@ -125,6 +125,7 @@ const handleSubmit = async () => {
 </script>
 
   <style scoped>
+    /* Commented out old styles
     .auth-ctn{
         display: flex;
         flex-direction: column;
@@ -213,5 +214,126 @@ const handleSubmit = async () => {
     }
     .switch{
       font-size: 0.8rem;
+    }*/
+    /* Conteneur principal */
+    .auth-ctn {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        width: 100%; /* Utilise toute la largeur sur mobile */
+        max-width: 800px; /* Limite sur desktop */
+        margin: 0 auto;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    /* Le Formulaire */
+    .auth-ctn form {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 25px; /* Plus d'espace pour le tactile */
+        min-height: 400px;
+        width: 100%; /* S'adapte au parent */
+        max-width: 500px; /* Largeur confortable pour la lecture */
+        margin-top: 20px;
+        padding: 30px 20px;
+        border-radius: 15px;
+        border: 2px solid #9da6e0;
+        box-sizing: border-box;
+    }
+
+    /* Conteneur de l'input */
+    .auth-ctn form .input-ctn {
+        height: auto;
+        width: 100%; /* Prend toute la largeur du formulaire */
+        color: #9da6e0;
+        margin: 0;
+        position: relative;
+    }
+
+    /* L'input réel */
+    .auth-ctn form .input-ctn .set-input {
+        height: 50px; /* Plus haut pour faciliter le clic au doigt */
+        width: 100%;
+        border-radius: 10px;
+        background-color: transparent;
+        color: #2a2f4f; /* Couleur plus lisible que le bleu clair sur fond blanc */
+        padding: 0 15px;
+        font-family: 'Poppins', sans-serif;
+        border: 1px solid #9da6e0;
+        box-sizing: border-box; /* Crucial pour que le padding n'élargisse pas l'input */
+    }
+
+    /* Le Label flottant */
+    .input-ctn .label {
+        position: absolute;
+        top: -10px;
+        left: 15px;
+        font-size: 0.75rem;
+        background-color: #fff;
+        padding: 0 5px;
+        z-index: 1;
+    }
+
+    /* Bouton d'action */
+    .auth-btn {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 50px;
+        width: 100%; /* Largeur totale sur mobile pour plus d'aisance */
+        max-width: 250px;
+        border: none;
+        border-radius: 10px;
+        background-color: #2a2f4f;
+        color: #eee;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 10px;
+        transition: opacity 0.3s;
+    }
+
+    .auth-btn:active {
+        opacity: 0.8;
+    }
+
+    /* Option Afficher/Masquer MDP */
+    .hideOrShow {
+        width: 100%;
+        font-family: 'Poppins', sans-serif;
+        font-size: 0.7rem;
+        text-align: right;
+        color: #9da6e0;
+        cursor: pointer;
+        margin-top: -15px; /* Rapproche du champ password */
+    }
+
+    .switch {
+        font-size: 0.8rem;
+        text-align: center;
+        padding: 0 10px;
+        color: #666;
+    }
+
+    /* Media Queries pour ajustements fins */
+    @media screen and (max-width: 768px) {
+        .auth-ctn {
+            transform: none; /* On retire le translate qui peut décentrer sur petit écran */
+            margin-top: 5vh;
+        }
+
+        .auth-ctn form {
+            border: none; /* Souvent plus propre sur mobile de ne pas avoir de bordure */
+            box-shadow: none;
+            padding: 10px;
+        }
+
+        h2 {
+            margin-bottom: 10px;
+        }
     }
   </style>
