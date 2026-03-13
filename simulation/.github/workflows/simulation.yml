@@ -1,0 +1,22 @@
+name: Corevia Daily Simulation
+on:
+  schedule:
+    - cron: '0 8 * * *' # Se lance tous les jours à 8h du matin
+  workflow_dispatch: # Permet de le lancer manuellement depuis l'onglet Actions de GitHub
+
+jobs:
+  run-robots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: npm install
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+      - name: Run Robots
+        run: npx playwright test
+        env:
+          APP_URL: ${{ secrets.APP_URL }}

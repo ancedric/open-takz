@@ -124,6 +124,55 @@
         </table>
       </div>
     </section>
+    <section v-else-if="currentTab === 'users'" class="tab-content">
+      <div class="admin-section">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Entreprise</th>
+              <th>Modules Actifs</th> <th>Employés</th>
+              <th>Fin d'abonnement</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="comp in companies" :key="comp.companyref">
+              <td>
+                <div class="comp-info">
+                  <span class="comp-name">{{ comp.companyname }}</span>
+                  <small>{{ comp.companyref }}</small>
+                </div>
+              </td>
+              
+              <td>
+                <div class="module-toggles">
+                  <label v-for="mod in ['inventory', 'hr', 'finance']" :key="mod" class="mod-pill" :class="{ active: comp.active_modules?.includes(mod) }">
+                    <input 
+                      type="checkbox" 
+                      :checked="comp.active_modules?.includes(mod)" 
+                      @change="toggleModule(comp, mod)"
+                      hidden
+                    />
+                    {{ mod === 'inventory' ? '📦 Stock' : mod === 'hr' ? '👥 RH' : '💰 Fin' }}
+                  </label>
+                </div>
+              </td>
+
+              <td>{{ comp.employe_count[0]?.count || 0 }}</td>
+              <td>
+                <span :class="getExpiryClass(comp.expiry_date)">
+                  {{ comp.expiry_date }}
+                </span>
+              </td>
+              <td>
+                <button @click="extendTrial(comp.companyref)" class="btn-tool">🎁 +3j</button>
+                <button @click="viewDetails(comp)" class="btn-tool">👁️ Détails</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
     <section v-else>
       <div class="newsletter-section">
         <div class="card">
@@ -164,6 +213,7 @@ const pendingRenewals = ref([]);
 const feedbacks = ref([]);
 const onlineUsers = ref(0);
 const companies = ref([]);
+const users = ref([]);
 const search = ref('');
 const onlineUsersCount = ref(0);
 const onlineUsersList = ref([]); 
@@ -215,6 +265,17 @@ const fetchCompanies = async () => {
   console.log("Données des entreprises récupérées :", data);
   companies.value = data || [];
   console.log(companies.value);
+};
+const fetchUsers = async () => {
+  const { data } = await supabase
+    .from('user')
+    .select(`
+      *
+    `)
+    .order('createdat', { ascending: false });
+  console.log("Données des utilisateurs récupérées :", data);
+  users.value = data || [];
+  console.log(users.value);
 };
 
 const extendTrial = async (ref) => {
@@ -361,6 +422,7 @@ const getExpiryClass = (date) => {
 onMounted(() => {
     fetchData();
     fetchCompanies()
+    fetchUsers()
     setupRealtime();
 });
 

@@ -19,26 +19,11 @@ export const useUserStore = defineStore('user', () => {
 
     const authenticate = async (userData, employe, company) => {
     try {
-        // 1. On récupère les magasins de l'entreprise
-        const { data: stores, error } = await supabase
-            .from('inventory_stores')
-            .select('*')
-            .eq('companyref', company.ref) // On utilise la ref de la company
-            .eq('is_active', true);
-
-        if (error) throw error;
-
-        // 2. On injecte les magasins dans l'objet company
-        const companyWithStores = {
-            ...company,
-            stores: stores || [] // La clé 'stores' que React utilisera
-        };
-
         // 3. On crée l'objet structuré global
         const sessionData = { 
             user: userData, 
             employe: employe, 
-            company: companyWithStores 
+            company: company 
         };
 
         user.value = sessionData;
