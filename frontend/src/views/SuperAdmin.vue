@@ -31,6 +31,7 @@
     <nav class="admin-nav">
       <button @click="currentTab = 'renewals'" :class="{ active: currentTab === 'renewals' }">Abonnements</button>
       <button @click="currentTab = 'feedbacks'" :class="{ active: currentTab === 'feedbacks' }">Retours Utilisateurs</button>
+      <button @click="currentTab = 'users'" :class="{ active: currentTab === 'users' }">Utilisateurs</button>
       <button @click="currentTab = 'companies'" :class="{ active: currentTab === 'companies' }">Entreprises</button>
       <button @click="currentTab = 'newsletter'" :class="{ active: currentTab === 'newsletter' }">Marketing & News</button>
     </nav>

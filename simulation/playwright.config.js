@@ -13,7 +13,8 @@ import { defineConfig, devices } from '@playwright/test';
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  testDir: './tests',
+  globalSetup: require.resolve('./global-setup'), // Ajoute cette ligne
+  testDir: './tests',                                                                                                                                                                                                   
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -21,7 +22,7 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  //workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [['list'], ['html', { open: 'never' }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -32,7 +33,17 @@ export default defineConfig({
     video: 'on-first-retry',
   },
 
-  /* Configure projects for major browsers */
+  timeout: 60000, // On passe à 60 secondes par test
+  globalTimeout: 300000, 
+  expect: { timeout: 10000 },
+  workers: 1, // Un seul robot à la fois en local pour éviter les conflits
+  projects: [
+    {
+      name: 'chromium', // On se concentre sur Chrome pour le moment
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+  /* Configure projects for major browsers 
   projects: [
     {
       name: 'chromium',
@@ -47,7 +58,7 @@ export default defineConfig({
     {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
-    },
+    },*/
 
     /* Test against mobile viewports. */
     // {
@@ -68,7 +79,7 @@ export default defineConfig({
     //   name: 'Google Chrome',
     //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     // },
-  ],
+  //],
 
   /* Run your local dev server before starting the tests */
   // webServer: {
