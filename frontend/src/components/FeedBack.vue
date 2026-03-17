@@ -65,7 +65,7 @@ const submitFeedback = async () => {
   try {
     const { error } = await supabase.from('app_feedbacks').insert({
       companyref: userStore.user.company.companyref,
-      employeref: `${userStore.user.employe.firstname} ${userStore.user.employe.lastname}`,
+      employeref: `${userStore.user.user.firstname} ${userStore.user.user.lastname}`,
       rating: form.rating,
       comment: form.comment,
       category: form.category

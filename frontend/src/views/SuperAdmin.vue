@@ -71,7 +71,7 @@
           </div>
           <p>"{{ f.comment }}"</p>
           <div class="card-footer">
-            <small>Par {{ f.employeref }} ({{ f.companyref }})</small>
+            <small>Par {{ f.employeref }} ({{ f.company.companyname }})</small>
           </div>
         </div>
       </div>
@@ -130,45 +130,30 @@
         <table class="admin-table">
           <thead>
             <tr>
-              <th>Entreprise</th>
-              <th>Modules Actifs</th> <th>Employés</th>
-              <th>Fin d'abonnement</th>
-              <th>Actions</th>
+              <th>Prénom</th>
+              <th>Nom</th>
+              <th>Email</th>
+              <th>Téléphone</th>
+              <th>Pays</th>
+              <th>Ville</th>
+              <th>Date inscription</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="comp in companies" :key="comp.companyref">
+            <tr v-for="u in users" :key="u.userref">
               <td>
                 <div class="comp-info">
-                  <span class="comp-name">{{ comp.companyname }}</span>
-                  <small>{{ comp.companyref }}</small>
+                  <span class="comp-name">{{ u.firstname }}</span>
+                  <small>{{ u.userref }}</small>
                 </div>
               </td>
               
-              <td>
-                <div class="module-toggles">
-                  <label v-for="mod in ['inventory', 'hr', 'finance']" :key="mod" class="mod-pill" :class="{ active: comp.active_modules?.includes(mod) }">
-                    <input 
-                      type="checkbox" 
-                      :checked="comp.active_modules?.includes(mod)" 
-                      @change="toggleModule(comp, mod)"
-                      hidden
-                    />
-                    {{ mod === 'inventory' ? '📦 Stock' : mod === 'hr' ? '👥 RH' : '💰 Fin' }}
-                  </label>
-                </div>
-              </td>
-
-              <td>{{ comp.employe_count[0]?.count || 0 }}</td>
-              <td>
-                <span :class="getExpiryClass(comp.expiry_date)">
-                  {{ comp.expiry_date }}
-                </span>
-              </td>
-              <td>
-                <button @click="extendTrial(comp.companyref)" class="btn-tool">🎁 +3j</button>
-                <button @click="viewDetails(comp)" class="btn-tool">👁️ Détails</button>
-              </td>
+              <td>{{ u.lastname }}</td>
+              <td>{{ u.email }}</td>
+              <td>{{ u.phone }}</td>
+              <td>{{ u.country }}</td>
+              <td>{{ u.city }}</td>
+              <td>{{ new Date(u.createdat).toLocaleDateString() }}</td>
             </tr>
           </tbody>
         </table>
@@ -231,15 +216,20 @@ const fetchData = async () => {
   // Récupérer les renouvellements en attente
   const { data: renewals } = await supabase
     .from('subscription_renewals')
-    .select('*, company(name)')
+    .select('*, company(companyname)')
     .eq('status', 'pending');
   pendingRenewals.value = renewals || [];
 
   // Récupérer les feedbacks
-  const { data: fb } = await supabase
+  const { data: fb, error: fbError } = await supabase
     .from('app_feedbacks')
-    .select('*')
+    .select('*, company(companyname)')
     .order('createdat', { ascending: false });
+  if (fbError) {
+    console.error("Erreur lors de la récupération des feedbacks :", fbError);
+  } else {
+    console.log("Données des feedbacks récupérées :", fb);
+  }
   feedbacks.value = fb || [];
 };
 
@@ -263,9 +253,7 @@ const fetchCompanies = async () => {
       employe_count:employe(count)
     `)
     .order('createdat', { ascending: false });
-  console.log("Données des entreprises récupérées :", data);
   companies.value = data || [];
-  console.log(companies.value);
 };
 const fetchUsers = async () => {
   const { data } = await supabase
@@ -274,9 +262,7 @@ const fetchUsers = async () => {
       *
     `)
     .order('createdat', { ascending: false });
-  console.log("Données des utilisateurs récupérées :", data);
   users.value = data || [];
-  console.log(users.value);
 };
 
 const extendTrial = async (ref) => {
