@@ -9,6 +9,7 @@ ChartJS.register(Title, Tooltip, Legend, LineElement, PointElement, CategoryScal
 
 const userStore = useUserStore();
 const archives = ref([]);
+const projectReports = ref([]);
 const loading = ref(true);
 
 const fetchArchives = async () => {
@@ -20,6 +21,19 @@ const fetchArchives = async () => {
 
   if (!error) archives.value = data;
   loading.value = false;
+};
+
+const fetchReports = async () => {
+  const { data, error } = await supabase
+    .from('project_reports')
+    .select('*, user:author_ref(firstname, lastname)')
+    .eq('company_ref', userStore.user.employe.companyref)
+    .order('created_at', { ascending: false });
+
+  if (!error) {
+    console.log("Project Reports:", data);
+    projectReports.value = data;
+  }
 };
 
 // Données pour le graphique de tendance
@@ -41,7 +55,10 @@ const trendChartData = computed(() => {
   };
 });
 
-onMounted(fetchArchives);
+onMounted(() => {
+  fetchArchives();
+  fetchReports(); 
+});
 </script>
 
 <template>
@@ -73,6 +90,23 @@ onMounted(fetchArchives);
           <div class="card-details">
             <div class="row"><span>Revenus:</span> <span>{{ report.total_income.toLocaleString() }}</span></div>
             <div class="row"><span>Charges:</span> <span>{{ report.total_expense.toLocaleString() }}</span></div>
+          </div>
+          <button @click="window.print()" class="btn-detail">Voir le rapport complet</button>
+        </div>
+      </div>
+
+      <h3>Historique des Rapports de projets</h3>
+      <div class="archive-grid">
+        <div v-for="report in projectReports" :key="report.id" class="report-card">
+          <div class="card-header">
+            <strong>{{ report.user.firstname }} {{ report.user.lastname }}</strong>
+            <span class="profit-badge">
+              {{ report.project_ref}}
+            </span>
+          </div>
+          <div class="card-details">
+            <div class="row">{{ report.content }}</div>
+            <div class="row">{{ report.created_at }}</div>
           </div>
           <button @click="window.print()" class="btn-detail">Voir le rapport complet</button>
         </div>

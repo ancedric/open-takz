@@ -38,6 +38,7 @@
     const isOverviewOpen = ref(true)
     const isDashboardOpen = ref(false)
     const isReportOpen = ref(false)
+    const isSendingReport = ref(false)
     const isTasksOpen = ref(false)
     const isSubmenuOpen = ref(false)
     const isTaskFormOpen = ref(false)
@@ -139,19 +140,22 @@
 
     const submitProjectReport = async () => {
         if (!newReport.value.content) return;
-
+        
+        isSendingReport.value = true
         const { data, error } = await supabase
             .from('project_reports')
             .insert([{
-                project_ref: selectedProjectId.value,
+                project_ref: userStore.currentProject.project.projectref,
                 author_ref: userStore.user.user.userref,
                 content: newReport.value.content,
                 progress_at_time: projectStats.value.completionRate,
                 company_ref: userStore.user.employe.companyref
             }]);
-
-        if (!error) {
+        if(error){
+            console.error("Error submitting report:", error);
+        }else{
             newReport.value.content = '';
+            isSendingReport.value = false
             fetchProjectReports(); // Rafraîchir la liste
         }
     };
@@ -160,7 +164,7 @@
         const { data } = await supabase
             .from('project_reports')
             .select('*, user:author_ref(firstname, lastname)')
-            .eq('project_ref', selectedProjectId.value)
+            .eq('project_ref', userStore.currentProject.project.projectref)
             .order('created_at', { ascending: false });
         projectReports.value = data || [];
     };
@@ -623,6 +627,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
         if(deptRef){
             await userStore.getProjects(deptRef);
             projects.value = userStore.projects;
+            fetchProjectReports()
         }
 
         isProjectsLoading.value = false
@@ -978,7 +983,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                     <h3>Rapports de rentabilité & Avancement</h3>
                     <div class="input-group">
                         <textarea v-model="newReport.content" placeholder="Note pour le manager sur la santé du projet..."></textarea>
-                        <button class="submit-btn" @click="submitProjectReport">Envoyer le rapport</button>
+                        <button class="submit-btn" @click="submitProjectReport">{{isSendingReport ? 'Envoi en cours...' : 'Envoyer le rapport'}}</button>
                     </div>
                     
                     <div class="reports-list">
