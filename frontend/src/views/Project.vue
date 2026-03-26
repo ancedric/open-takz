@@ -466,7 +466,7 @@ const resetTaskForm = () => {
 
 const setTaskStatus = async (status, taskRef) => {
     try{
-        userStore.currentProject.project.tasks.filter(t => t.taskref === taskRef)[0].status = status;
+        userStore.currentProject.tasks.filter(t => t.taskref === taskRef)[0].status = status;
         const {data, error}= await supabase
         .from('task')
         .update({status: status})
@@ -474,17 +474,19 @@ const setTaskStatus = async (status, taskRef) => {
         .select()
 
         if (data) {
+            const transactionRef = `EXP-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
             if(status === "ongoing"){
                 ///initier la transaction finacière
                 const {data: taskData, error: taskError} = await supabase
                 .from('finance_transactions')
                 .insert([{
-                    amount: userStore.currentProject.project.tasks.filter(t => t.taskref === taskRef)[0].task_budget,
+                    transaction_ref: transactionRef,
+                    amount: userStore.currentProject.tasks.filter(t => t.taskref === taskRef)[0].task_budget,
                     category: 'expense',
-                    label: `Coût Tâche : ${userStore.currentProject.project.tasks.filter(t => t.taskref === taskRef)[0].taskname}`,
-                    project_ref: userStore.currentProject.project.projectref,
+                    label: `Coût Tâche : ${userStore.currentProject.tasks.filter(t => t.taskref === taskRef)[0].taskname}`,
+                    projectref: userStore.currentProject.project.projectref,
                     companyref: userStore.user.employe.companyref,
-                    type: 'debit'
+                    category: 'expense'
                 }]);
                 if (taskError) throw taskError;
                 
@@ -1117,7 +1119,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                     <div class="states val">
                                         <h3>Validated</h3>
                                         <div v-for="task in userStore.currentProject.tasks" :key="task.taskref" class="task-card">
-                                            <div class="elem" v-if="task.status==='validated'">
+                                            <div class="elem" v-if="task.status==='verified'">
                                                 <div class="elem-title">{{task.taskname}}</div>
                                                 <div class="elem-status"> 
                                                     <p class="status">{{task.status}}</p> <p class="remain">{{ calculateTimeRemaining(task.startdate, task.enddate) }} remaining</p>

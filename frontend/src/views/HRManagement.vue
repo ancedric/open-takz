@@ -381,9 +381,8 @@ const fetchData = async () => {
     // Récupérer les employés
     const { data: userData } = await supabase
       .from('employe')
-      .select('*')
+      .select('*, user: userref(*)')
       .eq('companyref', userStore.user.company.companyref)
-      
     employees.value = userData;
     const { data: empData, error: empError } = await supabase
       .from('employe')
@@ -795,10 +794,11 @@ const fetchAttendanceAndLeaves = async () => {
   // 1. Charger les pointages du jour
   const { data: attData } = await supabase
     .from('attendance')
-    .select('*, employe(name, job_title)')
+    .select('*, employe(*, user(firstname, lastname), position)')
     .eq('companyref', companyRef)
     .eq('date', today);
   attendanceToday.value = attData || [];
+  console.log("Pointages du jour:", attendanceToday.value);
 
   // 2. Charger les demandes de congés en attente
   const { data: leaveData } = await supabase
@@ -1092,7 +1092,7 @@ onMounted(() => {
             <div class="emp-details-mobile">
               <div>
                 <span class="label">Salaire:</span><br>
-                <strong>{{ emp.salary.toLocaleString() }} XAF</strong>
+                <strong>{{ emp.salary }} XAF</strong>
               </div>
               <div>
                 <span class="label">Dép:</span><br>
@@ -1229,6 +1229,56 @@ onMounted(() => {
 
           <section class="attendance-today">
             <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg> Présences du jour ({{ new Date().toLocaleDateString() }})</h3>
+            <div class="table-wrapper">
+              <table class="mini-table desktop-only">
+                <thead>
+                  <tr>
+                    <th>Employé</th>
+                    <th>Arrivée</th>
+                    <th>Statut</th>
+                    <th>Départ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="att in attendanceToday" :key="att.id">
+                    <td>{{ att.employe?.user.firstname }} {{ att.employe?.user.lastname }} </td>
+                    <td>{{ new Date(att.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</td>
+                    <td>
+                      <span :class="['status-dot', att.status]"></span>
+                      {{ att.status === 'retard' ? 'En retard' : 'À l\'heure' }}
+                    </td>
+                    <td>{{ att.check_out ? new Date(att.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'En poste' }}</td>
+                  </tr>
+                  <tr v-if="attendanceToday.length === 0">
+                    <td colspan="4" class="empty-msg">Aucun pointage pour le moment aujourd'hui.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="mobile-emp-grid">
+                <div v-for="item in monthlySummary" :key="item.name" class="emp-card-mobile">
+                  <div class="emp-header-mobile">
+                    <div>
+                      <div class="t-label">{{ item.name }}</div>
+                      <div class="t-date">Période: {{ selectedMonth }}</div>
+                    </div>
+                  </div>
+                  <div class="emp-details-mobile">
+                    <div>
+                      <span class="label">Présent:</span><br>
+                      <strong>{{ item.presentDays }} j</strong>
+                    </div>
+                    <div>
+                      <span class="label">Retards:</span><br>
+                      <strong :class="item.lateCount > 3 ? 'text-danger fw-bold' : ''">{{ item.lateCount }}</strong>
+                    </div>
+                    <div>
+                      <span class="label">Congés:</span><br>
+                      <strong>{{ item.leaveDays }} j</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <section class="monthly-overview card">
               <div class="section-header">
                 <h3><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg> Récapitulatif Mensuel ({{ selectedMonth }})</h3>
@@ -1294,56 +1344,7 @@ onMounted(() => {
                 </div>
               </div>
             </section>
-            <div class="table-wrapper">
-              <table class="mini-table desktop-only">
-                <thead>
-                  <tr>
-                    <th>Employé</th>
-                    <th>Arrivée</th>
-                    <th>Statut</th>
-                    <th>Départ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="att in attendanceToday" :key="att.id">
-                    <td>{{ att.employe?.name }}</td>
-                    <td>{{ new Date(att.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</td>
-                    <td>
-                      <span :class="['status-dot', att.status]"></span>
-                      {{ att.status === 'retard' ? 'En retard' : 'À l\'heure' }}
-                    </td>
-                    <td>{{ att.check_out ? new Date(att.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'En poste' }}</td>
-                  </tr>
-                  <tr v-if="attendanceToday.length === 0">
-                    <td colspan="4" class="empty-msg">Aucun pointage pour le moment aujourd'hui.</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div class="mobile-emp-grid">
-                <div v-for="item in monthlySummary" :key="item.name" class="emp-card-mobile">
-                  <div class="emp-header-mobile">
-                    <div>
-                      <div class="t-label">{{ item.name }}</div>
-                      <div class="t-date">Période: {{ selectedMonth }}</div>
-                    </div>
-                  </div>
-                  <div class="emp-details-mobile">
-                    <div>
-                      <span class="label">Présent:</span><br>
-                      <strong>{{ item.presentDays }} j</strong>
-                    </div>
-                    <div>
-                      <span class="label">Retards:</span><br>
-                      <strong :class="item.lateCount > 3 ? 'text-danger fw-bold' : ''">{{ item.lateCount }}</strong>
-                    </div>
-                    <div>
-                      <span class="label">Congés:</span><br>
-                      <strong>{{ item.leaveDays }} j</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            
           </section>
 
           <section class="leave-validation">
@@ -2299,6 +2300,7 @@ onMounted(() => {
     opacity: 0;
 }
 
+.mobile-emp-grid{ display: none;}
 @media (max-width: 768px) {
   .desktop-only{
     display: none;
