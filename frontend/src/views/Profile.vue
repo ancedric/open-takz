@@ -44,7 +44,7 @@
             <main class="profile-main">
                 <header class="main-header">
                     <h2>Informations Personnelles</h2>
-                    <p>Gérez vos données de compte OpenTask</p>
+                    <p>Gérez vos données de compte Corevia</p>
                 </header>
 
                 <div class="details-grid">

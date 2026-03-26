@@ -75,10 +75,9 @@ const fetchMyData = async () => {
     // 3.3. Mes Tâches (filtrées par userref)
     // Note : Vérifie si dans ta table 'task' le champ est 'assigned_to' ou 'userref'
     const { data: tasks, error: taskErr } = await supabase
-      .from('task')
-      .select('*, project:projectref(projectname)')
-      .eq('assigned_to', userStore.user.user.ref) 
-      .order('enddate', { ascending: true });
+      .from('assignments')
+      .select('*, tasks:taskref(*, project: projectref(projectname))')
+      .eq('userref', userStore.user.user.userref) 
 
     if (taskErr) console.error("Erreur Tâches:", taskErr.message);
     myTasks.value = tasks || [];
@@ -193,13 +192,13 @@ onMounted(() => {
           <div class="task-list">
             <div v-for="task in myTasks" :key="task.taskref" :class="['task-item', getTaskStatus(task)]">
               <div class="task-info">
-                <strong>{{ task.title }}</strong>
-                <small>{{ task.project?.projectname }}</small>
+                <strong>{{ task.tasks.taskname }}</strong>
+                <small>{{ task.tasks.project?.projectname }}</small>
               </div>
               <div class="task-meta">
-                <span class="due-date"><AppIcon name="CALENDAR" size="20" /> {{ new Date(task.enddate).toLocaleDateString() }}</span>
+                <span class="due-date"><AppIcon name="CALENDAR" size="20" /> {{ task.tasks.enddate.split('T')[0] }}</span>
                 <div class="progress-bar-mini">
-                  <div class="progress" :style="{width: task.progress + '%'}"></div>
+                  <div class="progress" :style="{backgroundColor: task.tasks.status === 'pending' ? '#f59e0b' : task.tasks.status === 'completed' ? '#10b981' : '#ef4444'}"></div>
                 </div>
               </div>
               <span v-if="getTaskStatus(task) === 'retard'" class="alert-tag">RETARD</span>
@@ -312,6 +311,8 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
 }
+
+.proj-footer small { color: #94a3b8; font-size: 0.8rem; }
 
 .status-dot {
   width: 8px;
