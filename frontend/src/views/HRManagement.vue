@@ -798,14 +798,13 @@ const fetchAttendanceAndLeaves = async () => {
     .eq('companyref', companyRef)
     .eq('date', today);
   attendanceToday.value = attData || [];
-  console.log("Pointages du jour:", attendanceToday.value);
 
   // 2. Charger les demandes de congés en attente
   const { data: leaveData } = await supabase
     .from('leave_requests')
     .select('*')
     .eq('companyref', companyRef)
-    .eq('status', 'en_attente');
+    .eq('status', 'pending');
   pendingLeaves.value = leaveData || [];
 };
 
@@ -1035,7 +1034,7 @@ onMounted(() => {
             <tr>
               <th>Collaborateur</th>
               <th>Département</th>
-              <th>Rôle ERP</th>
+              <th>Poste</th>
               <th>Actions</th>
             </tr>
           </thead>

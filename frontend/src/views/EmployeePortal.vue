@@ -15,6 +15,14 @@ const currentTime = ref(new Date().toLocaleTimeString());
 const myTasks = ref([]);
 const myProjects = ref([]);
 const companyInfo = ref(null);
+const requestLeaveOpen = ref(false);
+const isSubmittingLeave = ref(false);
+const leaveRequest = ref({
+  type: '',
+  startDate: '',
+  endDate: '',
+  reason: ''
+});
 
 setInterval(() => {
   currentTime.value = new Date().toLocaleTimeString();
@@ -45,26 +53,26 @@ const fetchMyData = async () => {
 
     // 3. Projets (où l'employé est dans l'équipe)
     const { data: teamMemberships, error: teamErr } = await supabase
-      .from('team')
-      .select('projectref, role')
+      .from('collaborator')
+      .select('userref, role, team:teamref(projectref)')
       .eq('userref', userRef);
 
     if (teamErr) throw teamErr;
 
     if (teamMemberships && teamMemberships.length > 0) {
-      const projectRefs = teamMemberships.map(t => t.projectref);
+      const projectRefs = teamMemberships.map(t => ({projectref: t.team.projectref, role: t.role}));
 
       // 2. Récupérer les projets
       const { data: projectsData, error: projErr } = await supabase
         .from('project')
         .select('*')
-        .in('projectref', projectRefs);
+        .in('projectref', projectRefs.map(p => p.projectref));
 
       if (projErr) throw projErr;
 
       // 3. Fusionner : on ajoute le rôle correspondant à chaque projet
       myProjects.value = projectsData.map(proj => {
-        const membership = teamMemberships.find(t => t.projectref === proj.projectref);
+        const membership = teamMemberships.find(t => ({projectref: t.projectref, role: t.role}));
         return {
           ...proj,
           myRole: membership ? membership.role : 'Membre'
@@ -113,6 +121,38 @@ const today = new Date().toISOString().split('T')[0];
   if (data) attendanceRecord.value = data;
 };
 
+const submitLeaveRequest = async () => {
+  try{
+    isSubmittingLeave.value = true;
+    const reqRef = `LEAV-${Date.now()}`;
+    const {data, error } = await supabase.from('leave_requests').insert([{
+      request_ref: reqRef,
+      employee_id: userStore.user.employe.id,
+      employee_name: `${userStore.user.user.firstname} ${userStore.user.user.lastname}`,
+      companyref: userStore.user.company.companyref,
+      type: leaveRequest.type,
+      start_date: leaveRequest.value.startDate,
+      end_date: leaveRequest.value.endDate,
+      duration_days: Math.ceil((new Date(leaveRequest.value.endDate) - new Date(leaveRequest.value.startDate)) / (1000 * 60 * 60 * 24)) + 1,
+      reason: leaveRequest.value.reason,
+      status: 'pending'
+    }]);
+    if (error) throw error;
+    requestLeaveOpen.value = false;
+    // Réinitialiser le formulaire
+    leaveRequest.value = {
+      type: '',
+      startDate: '',
+      endDate: '',
+      reason: ''
+    };
+
+  }catch(e){
+    console.error("Erreur lors de la soumission de la demande de congé:", e);
+    isSubmittingLeave.value = false;
+  }
+};
+
 const handlePunch = async () => {
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -145,6 +185,24 @@ onMounted(() => {
 </script>
 
 <template>
+  <div class="modal" v-if="requestLeaveOpen" @click.self="requestLeaveOpen = false">
+    <div class="request-leave-form">
+      <label for="type">Type de congé:</label>
+      <select id="type" v-model="leaveRequest.type">
+        <option value="annuel">Congé annuel</option>
+        <option value="maladie">Congé maladie</option>
+        <option value="autre">Autre</option>
+      </select>
+      <label for="startDate">Date de début:</label>
+      <input type="date" id="startDate" v-model="leaveRequest.startDate">
+      <label for="enddate">Date de fin:</label>
+      <input type="date" id="enddate" v-model="leaveRequest.endDate">
+      <label for="reason">Motif:</label>
+      <textarea id="reason" v-model="leaveRequest.reason"></textarea>
+      <button @click="submitLeaveRequest" class="btn-submit">{{ isSubmittingLeave ? 'Soumission en cours...' : 'Soumettre la demande' }}</button>
+    </div>
+  </div>
+  
   <div class="portal-container">
     <header class="portal-header card">
       <div class="header-main">
@@ -168,6 +226,7 @@ onMounted(() => {
                 <button v-if="!attendanceRecord" @click="handlePunch" class="btn-punch in"> <AppIcon name="MAP_PIN" size="20" /> Arrivée</button>
                 <button v-else-if="!attendanceRecord.check_out" @click="handlePunch" class="btn-punch out"> <AppIcon name="LOCK" size="20" /> Départ</button>
                 <div v-else class="day-completed"> <AppIcon name="CHECK" size="20" /> Journée terminée</div>
+                <div class="btn-punch" @click="requestLeaveOpen = !requestLeaveOpen"> <AppIcon name="CHECK" size="20" /> Demander un congé</div>
             </div>
         </section>
 
@@ -184,7 +243,7 @@ onMounted(() => {
                 <small>Statut: {{ proj.status }}</small>
               </div>
             </div>
-            <p v-if="myProjects.length === 0" class="empty-msg">Aucun projet assigné pour le moment.</p>
+            <p v-if="myTasks.length === 0" class="empty-msg">Aucun projet assigné pour le moment.</p>
           </div>
         </section>
         <section class="tasks-section card">
@@ -248,6 +307,49 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.modal{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.request-leave-form {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.request-leave-form label {
+  font-weight: 600;
+}
+.request-leave-form input,
+.request-leave-form select,
+.request-leave-form textarea {
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px; 
+}
+.request-leave-form .btn-submit {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.3s;
+}
+.request-leave-form .btn-submit:hover {
+  background: #2563eb;
+}
 .portal-container { padding: 2rem; padding-top: 70px; max-width: 1200px; margin: 0 auto; background: #f8fafc; }
 .portal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; margin-bottom: 2rem; border-top: 5px solid #1e293b; }
 .job-title { color: #64748b; font-weight: 500; }
