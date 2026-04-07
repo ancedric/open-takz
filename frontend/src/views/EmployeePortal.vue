@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
-import { downloadPaySlip } from '../services/pdfGenerator'; 
+import { downloadContract, downloadPaySlip } from '../services/pdfGenerator'; 
 import AppIcon from '../components/AppIcon.vue';
 
 const userStore = useUserStore();
@@ -14,6 +14,7 @@ const currentTime = ref(new Date().toLocaleTimeString());
 // Nouvelles références
 const myTasks = ref([]);
 const myProjects = ref([]);
+const myContracts = ref([]);
 const companyInfo = ref(null);
 const requestLeaveOpen = ref(false);
 const isSubmittingLeave = ref(false);
@@ -89,6 +90,18 @@ const fetchMyData = async () => {
 
     if (taskErr) console.error("Erreur Tâches:", taskErr.message);
     myTasks.value = tasks || [];
+
+    //4. les contrats de travail
+    const { data: contracts, error: contractErr } = await supabase
+      .from('document')
+      .select('*')
+      .eq('employeeref', userStore.user.employe.empref)
+      .order('createdat', { ascending: false });
+
+      console.log('contrats récupérés:', contracts)
+      
+      myContracts.value = contracts || [];
+
   } catch (err) {
     console.error("Erreur portail:", err.message);
   } finally {
@@ -295,7 +308,33 @@ onMounted(() => {
                 <tr v-for="pay in myPayroll.slice(0, 5)" :key="pay.id">
                   <td><strong>{{ pay.month }}</strong></td>
                   <td>{{ pay.net_salary.toLocaleString() }}</td>
-                  <td><button @click="downloadPaySlip(pay)" class="btn-pdf-icon"><AppIcon name="IMPORT" size="20" /></button></td>
+                  <td><button @click="downloadPaySlip(pay, userStore.user.company)" class="btn-pdf-icon"><AppIcon name="IMPORT" size="20" /></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="contracts-list card">
+          <h3>Mes Contrats de travail</h3>
+          <div v-if="loading" class="loader">Chargement...</div>
+          <div v-else class="table-wrapper">
+            <table class="portal-table">
+              <thead>
+                <tr>
+                  <th>Entreprise</th>
+                  <th>Type de contrat</th>
+                  <th>Début</th>
+                  <th>Fin</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="contract in myContracts.slice(0, 5)" :key="contract.id">
+                  <td><strong>{{ contract.company }}</strong></td>
+                  <td>{{ contract.type_contrat }}</td>
+                  <td>{{ contract.start_period }}</td>
+                  <td>{{ contract.end_period }}</td>
+                  <td><button @click="downloadContract(userStore.user.employe)" class="btn-pdf-icon"><AppIcon name="IMPORT" size="20" /></button></td>
                 </tr>
               </tbody>
             </table>

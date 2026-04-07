@@ -1,12 +1,11 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import supabase from '../services/supabaseConfig';
-import downloadPaySlip from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router';
-import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import jsPDF from 'jspdf';
+import { downloadPaySlip } from '../services/pdfGenerator';
 import ConfirmModal from '../components/ConfirmmModal.vue';
 
 
@@ -35,11 +34,11 @@ const openEmpForm = ref(false);
 const isProcessingPayment = ref(false);
 const filterType = ref('employees');
 const userResult = ref (null);
-//Données de création d'un employé
-const empRef = ref('');
-const companyRef = ref(userStore.user.company.companyref)
 const position = ref('');
 const salary = ref('');
+const contractType = ref('');
+const start_date = ref('');
+const end_date = ref('');
 const paymentDay = ref('')
 const privilege = ref('employee');
 const legalForm = ref(''); // Récupéré depuis l'objet company
@@ -52,10 +51,8 @@ const selectedMonth = ref(new Date().toLocaleString('fr-FR', { month: 'long', ye
 
 const pendingLeaves = ref([]);
 const attendanceToday = ref([]);
-const allEmployees = ref([]);
 const monthlySummary = ref([]);
 const showPayConfirmModal = ref(false);
-const processingEmp = ref(null);
 const paySummary = ref({});
 const showPayModal = ref(false);
 const payDetails = ref(null);
@@ -159,7 +156,7 @@ const uploadDoc = async (event, type, empId) => {
     selectedEmployee.value[type === 'contract' ? 'contract_url' : 'medical_cert_url'] = urlData.publicUrl;
     alert("Document mis à jour avec succès !", "success");
   } catch (err) {
-    aleret("Erreur lors de l'envoi : " + err.message, "error");
+    alert("Erreur lors de l'envoi : " + err.message, "error");
   } finally {
     uploadingFile.value = false;
   }
@@ -172,16 +169,17 @@ const viewDoc = (url) => {
 const fetchPayslips = async () => {
   try {
     const { data, error } = await supabase
-      .from('payslip')
+      .from('payroll_history')
       .select(`
         *,
         employe:employe (
+          userref,
           position,
           user:user (firstname, lastname, email)
         )
       `)
-      .eq('company_ref', userStore.user.company.companyref)
-      .order('generated_at', { ascending: false });
+      .eq('companyref', userStore.user.company.companyref)
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
     payslips.value = data;
@@ -199,33 +197,27 @@ const fetchApplications = async () => {
 
     if (error) {
       console.error("Erreur applications:", error);
+      return
+    }
+
       const enhancedApplications = data.map(async (app) => {
         const { data: appData, error: appError} = await supabase
           .from('employe')
-          .select('companyref')
-          .eq('email', app.email)
+          .select('*, user:userref(*)')
+          .eq('userref', app.candidate_ref)
           .maybeSingle();
         
         return { ...app, candidate_info: appData || null };
       });
-      applications.value = enhancedApplications;
-    } else {
-      applications.value = data;
-    }
+      applications.value = await Promise.all(enhancedApplications);
 };
 
 const handlePayAll = async () => {
   if (!confirm("Voulez-vous marquer tous les bulletins de ce mois comme 'Payés' ?")) return;
   
   isProcessingPayment.value = true;
-  try {
-    const { error } = await supabase
-      .from('payslip')
-      .update({ status: 'paid' })
-      .eq('company_ref', userStore.user.company.companyref)
-      .eq('status', 'draft');
-
-    if (error) throw error;
+  try{
+    await Promise.all(upcomingPayments.value.map(emp => validatePayroll(emp)));
 
     alert("Paiements validés avec succès !", "success");
     await fetchPayslips(); 
@@ -247,100 +239,81 @@ const calculateCNPS = (baseSalary) => {
   return Math.round(assiette * TAUX_SALARIAL);
 };
 
-const preparePayroll = (employee) => {
-  const summary = monthlySummary.value.find(s => s.name === `${employee.user.firstname} ${employee.user.lastname}`);
-  const theoreticalDays = 22;
-  const actualDays = summary ? (summary.presentDays + summary.leaveDays) : theoreticalDays;
-  const missedDays = Math.max(0, theoreticalDays - actualDays);
-  const absenceDeduction = Math.round((employee.salary / theoreticalDays) * missedDays);
-  const adjustedBrut = employee.salary - absenceDeduction;
-  const socialCharges = calculateCNPS(adjustedBrut);
-
-  paySummary.value = {
-    employee,
-    missedDays,
-    absenceDeduction,
-    adjustedBrut,
-    socialCharges,
-    netToPay: adjustedBrut - socialCharges
-  };
-  
-  processingEmp.value = employee;
-  showPayConfirmModal.value = true;
-};
-
 const validatePayroll = async (employee) => {
-  // 0. Vérification anti-doublon
-  const isAlreadyPaid = await checkExistingPayroll(employee.id, selectedMonth.value);
-  if (isAlreadyPaid) {
-    alert(`La paie de ${employee.user.firstname} ${employee.user.lastname} pour ${selectedMonth.value} a déjà été validée.`, "error");
-    return;
-  }
+  try{
+    // 0. Vérification anti-doublon
+    const isAlreadyPaid = await checkExistingPayroll(employee.id, selectedMonth.value);
+    if (isAlreadyPaid) {
+      alert(`La paie de ${employee.user.firstname} ${employee.user.lastname} pour ${selectedMonth.value} a déjà été validée.`, "error");
+      return;
+    }
 
-  // 1. Récupérer le bilan d'assiduité
-  const summary = monthlySummary.value.find(s => s.name === employee.user.firstname + ' ' + employee.user.lastname);
+    // 1. Récupérer le bilan d'assiduité
+    const summary = monthlySummary.value.find(s => s.name === employee.user.firstname + ' ' + employee.user.lastname);
+    
+    // --- CALCUL DU TEMPS ---
+    const theoreticalDays = 22;
+    const actualDays = Math.min(theoreticalDays, (summary ? summary.presentDays + summary.leaveDays : theoreticalDays));
+    const missedDays = Math.max(0, theoreticalDays - actualDays);
+
+    // --- CALCUL DU BRUT APRÈS ABSENCES ---
+    const dailyRate = employee.salary / theoreticalDays;
+    const absenceDeduction = Math.round(dailyRate * missedDays);
+    const adjustedBrut = employee.salary - absenceDeduction;
+
+    // --- CALCUL DES CHARGES SOCIALES (CNPS) ---
+    const socialCharges = calculateCNPS(adjustedBrut);
+    
+    // --- CALCUL FINAL ---
+    // Note: Pour une précision totale, il faudrait soustraire l'IRPP, 
+    // la Taxe Communale et le Crédit Foncier, mais restons sur la CNPS pour l'instant.
+    const finalNet = adjustedBrut - socialCharges;
+
+    // 3. Dialogue de confirmation détaillé (Pratique pour le RH)
+    const confirmMsg = `SYNTHÈSE DE PAIE : ${employee.user.firstname} ${employee.user.lastname}\n` +
+      `-----------------------------------\n` +
+      `Période : ${selectedMonth.value}\n` +
+      `Jours Absence : ${missedDays} j\n` +
+      `Retenue : -${Math.round(absenceDeduction).toLocaleString()} XAF\n
+      -----------------------------------------
+      Salaire de Base : ${employee.salary.toLocaleString()} XAF
+      Retenue Absence (${missedDays}j) : -${absenceDeduction.toLocaleString()} XAF
+      -----------------------------------------
+      BRUT TAXABLE : ${adjustedBrut.toLocaleString()} XAF
+      Retenue CNPS (4,2%) : -${socialCharges.toLocaleString()} XAF
+      -----------------------------------------
+      NET À PAYER : ${Math.round(finalNet).toLocaleString()} XAF`;
+      `-----------------------------------\n` +
+      `NET À VIRER : ${finalNet.toLocaleString()} XAF\n\n` +
+      `Confirmer l'enregistrement et l'envoi en comptabilité ?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    // 4. Insertion avec toutes les métadonnées
+    // Insertion dans Supabase...
+    const { error } = await supabase
+      .from('payroll_history')
+      .insert([{
+        employee_id: employee.id,
+        companyref: userStore.user.employe.companyref,
+        employee_name: employee.user.firstname + ' ' + employee.user.lastname,
+        month: selectedMonth.value,
+        base_salary: employee.salary,
+        net_salary: Math.round(finalNet),
+        absences_count: missedDays,
+        absence_deduction: absenceDeduction,
+        social_charges: socialCharges // Pense à ajouter cette colonne en SQL
+      }]);
+
+    if (!error) {
+      alert("Succès : Bulletin archivé et flux financier créé.", "success");
+      // Optionnel : rafraîchir la liste pour griser le bouton valider
+      fetchMonthlySummary(); 
+    } else {
+      console.log("Erreur lors de la validation : ", error.message);
+    }
+  }catch(e){console.error("Erreur lors de la validation:", e)}
   
-  // --- CALCUL DU TEMPS ---
-  const theoreticalDays = 22;
-  const actualDays = Math.min(theoreticalDays, (summary ? summary.presentDays + summary.leaveDays : theoreticalDays));
-  const missedDays = Math.max(0, theoreticalDays - actualDays);
-
-  // --- CALCUL DU BRUT APRÈS ABSENCES ---
-  const dailyRate = employee.salary / theoreticalDays;
-  const absenceDeduction = Math.round(dailyRate * missedDays);
-  const adjustedBrut = employee.salary - absenceDeduction;
-
-  // --- CALCUL DES CHARGES SOCIALES (CNPS) ---
-  const socialCharges = calculateCNPS(adjustedBrut);
-  
-  // --- CALCUL FINAL ---
-  // Note: Pour une précision totale, il faudrait soustraire l'IRPP, 
-  // la Taxe Communale et le Crédit Foncier, mais restons sur la CNPS pour l'instant.
-  const finalNet = adjustedBrut - socialCharges;
-
-  // 3. Dialogue de confirmation détaillé (Pratique pour le RH)
-  const confirmMsg = `SYNTHÈSE DE PAIE : ${employee.user.firstname} ${employee.user.lastname}\n` +
-    `-----------------------------------\n` +
-    `Période : ${selectedMonth.value}\n` +
-    `Jours Absence : ${missedDays} j\n` +
-    `Retenue : -${Math.round(absenceDeduction).toLocaleString()} XAF\n
-    -----------------------------------------
-    Salaire de Base : ${employee.salary.toLocaleString()} XAF
-    Retenue Absence (${missedDays}j) : -${absenceDeduction.toLocaleString()} XAF
-    -----------------------------------------
-    BRUT TAXABLE : ${adjustedBrut.toLocaleString()} XAF
-    Retenue CNPS (4,2%) : -${socialCharges.toLocaleString()} XAF
-    -----------------------------------------
-    NET À PAYER : ${Math.round(finalNet).toLocaleString()} XAF`;
-    `-----------------------------------\n` +
-    `NET À VIRER : ${finalNet.toLocaleString()} XAF\n\n` +
-    `Confirmer l'enregistrement et l'envoi en comptabilité ?`;
-
-  if (!confirm(confirmMsg)) return;
-
-  // 4. Insertion avec toutes les métadonnées
-  // Insertion dans Supabase...
-  const { error } = await supabase
-    .from('payroll_history')
-    .insert([{
-      employee_id: employee.id,
-      companyref: userStore.user.employe.companyref,
-      employee_name: employee.user.firstname + ' ' + employee.user.lastname,
-      month: selectedMonth.value,
-      base_salary: employee.salary,
-      net_salary: Math.round(finalNet),
-      absences_count: missedDays,
-      absence_deduction: absenceDeduction,
-      social_charges: socialCharges // Pense à ajouter cette colonne en SQL
-    }]);
-
-  if (!error) {
-    alert("Succès : Bulletin archivé et flux financier créé.", "success");
-    // Optionnel : rafraîchir la liste pour griser le bouton valider
-    fetchMonthlySummary(); 
-  } else {
-    alert("Erreur lors de la validation : " + error.message, "error");
-  }
 };
 
 // Fonction utilitaire pour éviter les doublons
@@ -404,74 +377,6 @@ const fetchData = async () => {
   }
 };
 
-// Calcul du coût total (Simulation de paie)
-const calculateTotalCost = (baseSalary, isOwner) => {
-  let taxRate = 0.22; // Taux par défaut employé (22%)
-  let patronalRate = 0.45; // Taux patronal par défaut
-
-  // Logique selon la forme juridique
-  if (isOwner) {
-    if (legalForm.value === 'SARL') {
-      // Gérant Majoritaire (TNS) : Pas de fiche de paie classique
-      taxRate = 0.45; 
-      patronalRate = 0; // Inclus dans les 45%
-    } else if (legalForm.value === 'SAS') {
-      // Président (Assimilé-Salarié) : Charges très élevées
-      taxRate = 0.28;
-      patronalRate = 0.54;
-    }
-  }
-
-  const netNet = baseSalary * (1 - taxRate);
-  const totalCost = baseSalary * (1 + patronalRate);
-
-  return { netNet, totalCost };
-};
-
-const downloadPDF = (slip) => {
-  const doc = new jsPDF();
-  const title = `Bulletin de paie - ${slip.month_year}`;
-  
-  // Design du PDF
-  doc.setFontSize(20);
-  doc.text(userStore.user.company.companyname, 105, 20, { align: 'center' });
-  doc.setFontSize(10);
-  doc.text(title, 105, 30, { align: 'center' });
-  
-  doc.line(20, 35, 190, 35);
-
-  // Infos Employé
-  doc.setFont(undefined, 'bold');
-  doc.text(`Employé: ${slip.employe.user.firstname} ${slip.employe.user.lastname}`, 20, 50);
-  doc.setFont(undefined, 'normal');
-  doc.text(`Poste: ${slip.employe.position}`, 20, 56);
-  doc.text(`Période: ${slip.month_year}`, 20, 62);
-
-  // Tableau des montants
-  doc.autoTable({
-    startY: 75,
-    head: [['Description', 'Montant (XAF)']],
-    body: [
-      ['Salaire de base (Brut)', slip.gross_salary.toLocaleString()],
-      ['Cotisations sociales (est.)', `-${(slip.gross_salary - slip.net_salary).toLocaleString()}`],
-      ['NET À PAYER', { content: slip.net_salary.toLocaleString(), styles: { fontStyle: 'bold' } }],
-    ],
-    theme: 'striped'
-  });
-
-  doc.text(`Généré le: ${new Date().toLocaleDateString()}`, 20, doc.lastAutoTable.finalY + 20);
-  
-  if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
-    // Sur mobile, il est préférable d'ouvrir dans un nouvel onglet
-    const blob = doc.output('bloburl');
-    window.open(blob, '_blank');
-  } else {
-    // Téléchargement
-    doc.save(`Fiche_Paie_${slip.employe.user.lastname}_${slip.month_year}.pdf`);
-  }
-  
-};
-
 const handleSearchUser = async (email) => {
   try{
     const {data, error} = await supabase
@@ -511,6 +416,7 @@ const updateAppStatus = async (application, newStatus) => {
         }
         // 2. Si le RH a cliqué sur "Accepter"
         if (newStatus === 'accepted') {
+          console.log(application)
             userResult.value = [{
                 user: {
                     userref: application.candidate_ref,
@@ -518,7 +424,7 @@ const updateAppStatus = async (application, newStatus) => {
                     lastname: application.lastname,
                     email: application.email
                 },
-                employe: { userref: application.candidate_ref }
+                employe: { ...application.candidate_info }
             }];
             openEmpForm.value = true;
         } else {
@@ -557,6 +463,7 @@ const handleAddEmploye = async () => {
                 salary: cleanSalary,
                 paymentday: paymentDay.value,
                 privilege: privilege.value,
+                contrat: contractType.value || 'INTERNSHIP',
                 hired_at: new Date().toISOString()
             })
             .eq('userref', userRef);
@@ -565,16 +472,80 @@ const handleAddEmploye = async () => {
 
         // 2. Génération et Sauvegarde du contrat
         const doc = new jsPDF();
-        const date = new Date().toLocaleDateString();
+        const primaryBlue = [37, 99, 235];
 
-        // --- Ton Design de Contrat ---
-        doc.setFontSize(20);
-        doc.text("CONTRAT DE TRAVAIL", 105, 20, { align: "center" });
-        doc.setFontSize(12);
-        doc.text(`L'employeur : ${userStore.user.company.companyname}`, 20, 65);
-        doc.text(`Le salarié : ${selectedUser.firstname} ${selectedUser.lastname}`, 20, 75);
-        doc.text(`Poste : ${position.value} | Salaire : ${salary.value} XAF`, 20, 105);
-        // -----------------------------
+        // --- EN-TÊTE ---
+        doc.setFontSize(18);
+        doc.setTextColor(...primaryBlue);
+        doc.setFont('helvetica', 'bold');
+        doc.text(userStore.user.company.companyname.toUpperCase(), 20, 20);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Registre: ${userStore.user.company.register_number || 'N/A'}`, 20, 26);
+        doc.text(`${userStore.user.company.address || 'Cameroun'}`, 20, 31);
+
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(...primaryBlue);
+        doc.line(20, 35, 190, 35);
+
+        // --- TITRE DU CONTRAT ---
+        const typeContrat = contractType.value || 'INTERNSHIP';
+        doc.setFontSize(16);
+        doc.setTextColor(0);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`CONTRAT DE TRAVAIL À DURÉE ${typeContrat === 'CDI' ? 'INDÉTERMINÉE' : 'DÉTERMINÉE'}`, 105, 50, { align: 'center' });
+
+        // --- CORPS DU TEXTE ---
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        
+        let yPos = 65;
+        const margin = 20;
+        const maxWidth = 170;
+        
+        const intro = `Entre les soussignés :\n\n` +
+                      `L'entreprise ${userStore.user.company.companyname}, représentée par son représentant légal, ci-après désignée "L'Employeur",\n\n` +
+                      `Et M./Mme ${selectedUser.lastname} ${selectedUser.firstname}, résidant à ${selectedUser.city}, ${selectedUser.country}, ci-après désigné(e) "L'Employé(e)".`;
+
+        const lines = doc.splitTextToSize(intro, maxWidth);
+        doc.text(lines, margin, yPos);
+        yPos += (lines.length * 7) + 10;
+
+        // --- CLAUSES ---
+        const clauses = [
+          { t: "Article 1 : Engagement", c: `L'Employé(e) est engagé(e) à compter du ${start_date.value} en qualité de ${position.value}.` },
+          { t: "Article 2 : Rémunération", c: `Pour l'exercice de ses fonctions, l'employé(e) percevra une rémunération brute mensuelle de ${salary.value?.toLocaleString()} XAF.` },
+          { t: "Article 3 : Lieu de travail", c: `Le lieu de travail est fixé au siège de l'entreprise ou en tout autre lieu jugé nécessaire par l'employeur pour les besoins du service.` }
+        ];
+
+        clauses.forEach(clause => {
+          doc.setFont('helvetica', 'bold');
+          doc.text(clause.t, margin, yPos);
+          yPos += 6;
+          doc.setFont('helvetica', 'normal');
+          const cLines = doc.splitTextToSize(clause.c, maxWidth);
+          doc.text(cLines, margin, yPos);
+          yPos += (cLines.length * 6) + 8;
+        });
+
+        // --- SIGNATURES ---
+        yPos = Math.min(yPos + 20, 250);
+        doc.text(`Fait à ${userStore.user.user.city}, le ${new Date().toLocaleDateString()}`, margin, yPos);
+        
+        yPos += 15;
+        doc.setFont('helvetica', 'bold');
+        doc.text("L'Employeur (Cachet et Signature)", margin, yPos);
+        doc.text("L'Employé(e) (Précédé de 'Lu et approuvé')", 120, yPos);
+
+        // --- FOOTER COREVIA ---
+        const pageHeight = doc.internal.pageSize.height;
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.line(20, pageHeight - 20, 190, pageHeight - 20);
+        doc.text('Généré via Corevia - https://getcorevia.net | Support: +237 622 14 06 39', 105, pageHeight - 10, { align: 'center' });
+
 
         // SAUVEGARDE SUR SUPABASE STORAGE
         const pdfBlob = doc.output('blob');
@@ -598,6 +569,26 @@ const handleAddEmploye = async () => {
               console.log(error);
               throw error;
             }
+          
+            const docRef = 'CONTR-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+            console.log(userResult.value)
+          //Enregistrement dans les documents en base de données
+          const {error: docError} = await supabase
+            .from('document')
+            .insert({         
+              doc_ref: docRef,
+              employeeref: userResult.value[0].employe.empref,
+              companyref: userStore.user.company.companyref,
+              type: typeContrat,
+              start_period: start_date.value,
+              end_period: end_date.value,
+              doc_url: urlData.publicUrl
+            });
+            
+            if (docError) {
+              console.log(docError);
+              throw docError;
+            }
         // 3. Téléchargement local pour le RH
         doc.save(fileName);
 
@@ -612,36 +603,6 @@ const handleAddEmploye = async () => {
     } finally {
         isCreatingEmp.value = false;
     }
-};
-
-const generateAndSaveContract = async (candidate) => {
-    const doc = new jsPDF();
-    // ... (Ton code de design du contrat ici) ...
-    doc.text(`CONTRAT DE TRAVAIL : ${candidate.firstname} ${candidate.lastname}`, 20, 20);
-    // ...
-
-    // Conversion en Blob pour Supabase
-    const pdfBlob = doc.output('blob');
-    const fileName = `contrat_${candidate.userref}_${Date.now()}.pdf`;
-    const filePath = `${userStore.user.company.companyref}/${fileName}`;
-
-    // Upload vers le bucket 'contracts'
-    const { data, error } = await supabase.storage
-        .from('contracts')
-        .upload(filePath, pdfBlob, { contentType: 'application/pdf' });
-
-    if (error) throw error;
-
-    // Optionnel : Enregistrer l'URL du contrat dans la table employe
-    const { data: urlData } = supabase.storage.from('contracts').getPublicUrl(filePath);
-    
-    await supabase
-        .from('employe')
-        .update({ contract_url: urlData.publicUrl })
-        .eq('userref', candidate.userref);
-
-    doc.save(fileName); // Téléchargement local pour le RH
-    return urlData.publicUrl;
 };
 
 // 2. FONCTION : Créer un département
@@ -884,9 +845,12 @@ watch(filterType, (newVal) => {
     fetchData(); // On recharge les données fraîches
   }
 });
-onMounted(() => {
+onMounted(async () => {
   checkAccess();
-  fetchData();
+  await fetchData();
+  await fetchApplications();
+
+  console.log('Applications enrichies:', applications.value);
 });
 </script>
 
@@ -1184,7 +1148,7 @@ onMounted(() => {
             {{ isProcessingPayment ? 'Traitement...' : 'Tout marquer comme payé' }}
           </button>
           
-          <button @click="downloadPaySlip(report)" class="btn-download">
+          <button @click="downloadPaySlip(report, userStore.user.company)" class="btn-download">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> Télécharger Bulletin
           </button>
         </div>
@@ -1206,11 +1170,11 @@ onMounted(() => {
                   <div class="name">{{ slip.employe.user.firstname }} {{ slip.employe.user.lastname }}</div>
                 </div>
               </td>
-              <td>{{ slip.month_year }}</td>
-              <td>{{ slip.gross_salary.toLocaleString() }} XAF</td>
+              <td>{{ slip.month }}</td>
+              <td>{{ slip.base_salary.toLocaleString() }} XAF</td>
               <td style="font-weight: bold; color: #2ecc71;">{{ slip.net_salary.toLocaleString() }} XAF</td>
               <td>
-                <span :class="'status-badge ' + slip.status">{{ slip.status }}</span>
+                <span class="status-badge paid">Paid</span>
               </td>
               <td>
                 <button @click="downloadPDF(slip)" class="btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 10 12 13 9 10"></polyline><line x1="12" y1="3" x2="12" y2="13"></line><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg> PDF</button>
@@ -1219,11 +1183,11 @@ onMounted(() => {
           </tbody>
         </table>
         <div class="mobile-emp-grid">
-          <div v-for="slip in payslips" :key="slip.payslip_id" class="emp-card-mobile">
+          <div v-for="slip in payslips" :key="slip.id" class="emp-card-mobile">
             <div class="emp-header-mobile">
               <div>
                 <div class="t-label">{{ slip.employe.user.firstname }} {{ slip.employe.user.lastname }}</div>
-                <div class="t-date">Période: {{ slip.month_year }}</div>
+                <div class="t-date">Période: {{ slip.month }}</div>
               </div>
             </div>
           </div>
@@ -1469,7 +1433,7 @@ onMounted(() => {
                               <td>
                                 <div class="user-info">
                                   <div>
-                                    <div class="name">{{ app.firstname }} {{ app.lastname }}</div>
+                                    <div class="name">{{ app.candidate_info?.user.firstname }} {{ app.lastname }}</div>
                                     <div class="email">{{ app.email }}</div>
                                   </div>
                                 </div>
@@ -1564,7 +1528,7 @@ onMounted(() => {
         <h3>{{userResult[0].firstname}} {{userResult[0].lastname}}</h3>
         <p>{{userResult[0].email}}</p>
         <div class="dept-form">
-          <label>Type de contrat</label>
+          <label>Catégorie d'employé</label>
           <select v-model="privilege" class="dept-input">
             <option value="employee">Salarié Standard</option>
             <option value="admin">chef de Département</option>
@@ -1579,6 +1543,24 @@ onMounted(() => {
           >
         </div>
         <div class="dept-form">
+          <label>Type de contrat</label>
+          <select v-model="contractType" class="dept-input">
+            <option value="CDD">Contrat à durée déterminée</option>
+            <option value="CDI">Contrat à durée indéterminée</option>
+            <option value="INTERNSHIP">Stage/Internat</option>
+          </select>
+          <label for="start_date">Date de début</label>
+          <input 
+            type="date" 
+            v-model="start_date" 
+            class="dept-input"
+          >
+          <label for="end_date">Date de fin</label>
+          <input 
+            type="date" 
+            v-model="end_date" 
+            class="dept-input"
+          >
           <label>Salaire</label>
           <input 
             v-model="salary" 

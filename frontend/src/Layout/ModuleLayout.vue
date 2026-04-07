@@ -4,6 +4,7 @@ import supabase from '../services/supabaseConfig.js'
 import { useRouter } from 'vue-router';
 import { ref, onMounted, computed } from 'vue';
 import Header from '../components/Header.vue'
+import Chat from '../components/Chat.vue'
 import FeedbackModal from '../components/FeedBack.vue';
 
 const feedbackRef = ref(null);
@@ -150,6 +151,7 @@ const logout = () => {
       </button>
       <section class="page-view">
         <router-view />
+        <Chat />
       </section>
     </main>
   </div>

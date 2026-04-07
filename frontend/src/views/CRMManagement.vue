@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
-import Project from './Project.vue'
+import PartnerSearch from '../components/PartnerSearch.vue';
 
 const userStore = useUserStore();
 const clients = ref([]);
@@ -75,7 +75,7 @@ onMounted(async () => {
       <div class="table-controls">
         <div class="filters">
           <button :class="{ active: filterType === 'clients' }" @click="filterType = 'clients'">Clients</button>
-          <button :class="{ active: filterType === 'projects' }" @click="filterType = 'projects'">Projets</button>
+          <button :class="{ active: filterType === 'search' }" @click="filterType = 'search'">Recherche de clients</button>
         </div>
       </div>
       
@@ -116,7 +116,7 @@ onMounted(async () => {
         </div>
       </div>
       <div v-else>
-        <Project v-if="deptRef" :deptId="deptRef" />
+        <PartnerSearch />
       </div>
   </div>
 </template>

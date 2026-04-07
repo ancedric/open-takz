@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import Spinner from '../components/Spinner.vue';
@@ -7,814 +7,714 @@ import Spinner from '../components/Spinner.vue';
 const userStore = useUserStore();
 const loading = ref(true);
 const transactions = ref([]);
-const filterType = ref('all'); // all, income, expense
+const filterType = ref('all');
 const showManualForm = ref(false);
-const selectedMonth = ref(new Date().toISOString().slice(0,7));
-const balance = computed(() => {
-  const totalCashIn = transactions.value
-    .filter(t => t.account_code?.startsWith('1') || t.account_code?.startsWith('7'))
-    .reduce((sum, t) => sum + t.amount, 0);
+const selectedMonth = ref(new Date().toISOString().slice(0, 7));
+const toast = ref({ show: false, message: '', type: 'success' });Format: "2026-04"
+const showBudgetModal = ref(false);
 
-  const totalCashOut = transactions.value
-    .filter(t => t.account_code?.startsWith('6'))
-    .reduce((sum, t) => sum + t.amount, 0);
+// Calcul de l'année en cours pour le Dashboard
+const currentYear = new Date().getFullYear();
 
-  return totalCashIn - totalCashOut;
+// --- RÉFÉRENTIEL OHADA SIMPLIFIÉ (Pour le DAF) ---
+const ohadaClasses = [
+  { code: '1', label: 'Capital & Ressources durables' },
+  { code: '2', label: 'Actif Immobilisé' },
+  { code: '4', label: 'Tiers (Créances/Dettes)' },
+  { code: '6', label: 'Charges (Achats, Salaires...)' },
+  { code: '7', label: 'Produits (Ventes)' }
+];
+
+const budgetSettings = ref({
+  salaires: 0,
+  loyer_charges_fixes: 0,
+  projets_dev: 0,
+  marketing: 0,
+  imprevus: 0
 });
-const totalIncome = computed(() => {
-  return transactions.value
-    .filter(t => t.category === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
-});
-const totalExpense = computed(() => {
-  return transactions.value
-    .filter(t => t.category === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
-});
+
+const tempBudget = ref({ ...budgetSettings.value });
+
+// --- ÉTAT DU FORMULAIRE D'ÉCRITURE COMPTABLE ---
 const newEntry = ref({
   label: '',
   amount: 0,
-  account_code: '601', // Code par défaut (Fournitures)
+  account_code: '601', // Par défaut: Achats de marchandises
+  category: 'expense',
+  projectref: '',
+  created_at: new Date().toISOString().slice(0, 10)
 });
 
-// Liste OHADA simplifiée pour le Cameroun
-const ohadaCommonCodes = [
-  { code: '101', label: 'Capital social' },
-  { code: '164', label: 'Emprunts et dettes financières' },
-  { code: '421', label: 'Personnel - Salaires à payer' },
-  { code: '601', label: 'Achats de fournitures' },
-  { code: '605', label: 'Électricité, Eau' },
-  { code: '611', label: 'Transports et Déplacements' },
-  { code: '622', label: 'Loyers et charges' },
-  { code: '625', label: 'Internet et Téléphone' },
-  { code: '632', label: 'Impôts et Taxes' },
-  { code: '645', label: 'Charges sociales' },
-  { code: '701', label: 'Ventes' },
-];
+// --- CALCULS COMPTABLES AVANCÉS (MISSION 3 DU DAF) -
+// 
+const fetchBudgetSettings = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('budget_settings')
+      .select('category_key, limit_amount')
+      .eq('ref_entreprise', userStore.user.company.companyref)
+      .eq('year', currentYear);
 
-// Récupération des données
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      data.forEach(item => {
+        if (budgetSettings.value.hasOwnProperty(item.category_key)) {
+          budgetSettings.value[item.category_key] = item.limit_amount;
+        }
+      });
+    }
+  } catch (e) {
+    console.error("Erreur de chargement du budget");
+  }
+};
+
+// SAUVEGARDE : Upsert basé sur l'année et la clé de catégorie
+  const saveBudgetSettings = async () => {
+    try{
+    const entrepriseRef = userStore.user.company.companyref;
+
+  const upsertData = Object.keys(tempBudget.value).map(key => ({
+    ref_entreprise: entrepriseRef, // ON LIE CHAQUE LIGNE À L'ENTREPRISE
+    year: currentYear,
+    category_key: key,
+    limit_amount: tempBudget.value[key],
+    updated_at: new Date()
+  }));
+
+  const { error } = await supabase
+    .from('budget_settings')
+    .upsert(upsertData, { onConflict: 'ref_entreprise,year,category_key' });
+
+    if (error) throw error;
+
+    budgetSettings.value = { ...tempBudget.value };
+    showBudgetModal.value = false;
+    showToast("Budget prévisionnel mis à jour");
+  } catch (e) {
+    showToast("Erreur lors de l'enregistrement", "error");
+  }
+};
+
+// LOGIQUE D'EXÉCUTION (Calculée sur tes transactions existantes)
+const budgetExecution = computed(() => {
+  const actuals = {
+    salaires: transactions.value.filter(t => t.account_code?.startsWith('66')).reduce((s, t) => s + t.amount, 0),
+    loyer_charges_fixes: transactions.value.filter(t => t.account_code?.startsWith('62') || t.account_code?.startsWith('63')).reduce((s, t) => s + t.amount, 0),
+    projets_dev: transactions.value.filter(t => t.projectref && t.category === 'expense').reduce((s, t) => s + t.amount, 0),
+    marketing: transactions.value.filter(t => t.account_code === '601').reduce((s, t) => s + t.amount, 0),
+    imprevus: transactions.value.filter(t => t.account_code?.startsWith('65')).reduce((s, t) => s + t.amount, 0),
+  };
+
+  return Object.keys(budgetSettings.value).map(key => {
+    const limit = budgetSettings.value[key];
+    const spent = actuals[key] || 0;
+    return {
+      key,
+      label: key.replace(/_/g, ' '),
+      limit,
+      spent,
+      remaining: limit - spent,
+      percent: limit > 0 ? (spent / limit) * 100 : 0
+    };
+  });
+});
+
+// 1. Calcul du Résultat Net (Produits - Charges)
+const netResult = computed(() => {
+  const produits = transactions.value
+    .filter(t => t.account_code?.startsWith('7'))
+    .reduce((sum, t) => sum + t.amount, 0);
+    
+  const charges = transactions.value
+    .filter(t => t.account_code?.startsWith('6'))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  return produits - charges;
+});
+
+// 2. Calcul de la Capacité d'Autofinancement (CAF) simplifiée
+const cafValue = computed(() => {
+  // En compta OHADA, c'est un indicateur vital pour le CFO
+  return netResult.value; // Simplifié pour le composant actuel
+});
+
+// 3. Ventilation par Classe (Pour le Bilan)
+const classBreakdown = computed(() => {
+  const totals = {};
+  transactions.value.forEach(t => {
+    const firstDigit = t.account_code?.charAt(0);
+    if (firstDigit) {
+      totals[firstDigit] = (totals[firstDigit] || 0) + t.amount;
+    }
+  });
+  return totals;
+});
+
+// --- ACTIONS ---
+
+// MODIFICATION DES CALCULS : On se base sur l'année pour le CFO
+const totalIncome = computed(() => {
+  return transactions.value
+    .filter(t => {
+      const year = new Date(t.created_at).getFullYear();
+      return (year === currentYear) && (t.category === 'income' || t.category === 'budget_allocation');
+    })
+    .reduce((sum, t) => sum + t.amount, 0);
+});
+
+const totalExpense = computed(() => {
+  return transactions.value
+    .filter(t => {
+      const year = new Date(t.created_at).getFullYear();
+      return (year === currentYear) && (t.category === 'expense');
+    })
+    .reduce((sum, t) => sum + t.amount, 0);
+});
+
+// FILTRE DU JOURNAL : Uniquement pour la table détaillée
+const filteredTransactions = computed(() => {
+  if (!selectedMonth.value) return transactions.value;
+  return transactions.value.filter(t => t.created_at.startsWith(selectedMonth.value));
+});
+
+// RÉCUPÉRATION GLOBALE (SANS FILTRE SQL)
 const fetchAccountingData = async () => {
-  if (!userStore.user.company.companyref) return;
-  
   loading.value = true;
   try {
+    // On récupère tout pour l'année en cours pour éviter les trous dans les calculs
     const { data, error } = await supabase
       .from('finance_transactions')
       .select('*')
-      .eq('companyref', userStore.user.company.companyref)
+      .gte('created_at', `${currentYear}-01-01`)
       .order('created_at', { ascending: false });
 
-    if (error) console.error(error.message);
-    transactions.value = data;
-    console.log("Données comptables chargées:", data);
-  } catch (err) {
-    console.error("Erreur comptable:", err.message);
+    if (error) throw error;
+    transactions.value = data || [];
+  } catch (e) {
+    showToast("Erreur de synchronisation", "error");
   } finally {
     loading.value = false;
   }
 };
 
-const burnRateAnalysis = computed(() => {
-  const initialCapital = massAnalysis.value.capital;
-  const totalExpenses = massAnalysis.value.charges;
+const submitAccountingEntry = async () => {
+  if (newEntry.value.amount <= 0) return showToast("Montant invalide", "error");
   
-  // Calcul du pourcentage consommé
-  const consumptionPercentage = initialCapital > 0 
-    ? Math.min(Math.round((totalExpenses / initialCapital) * 100), 100) 
-    : 0;
-
-  // Estimation de la "Runway" (combien de mois il reste si on continue ainsi)
-  // On prend la moyenne des dépenses (ici simplifié sur les données chargées)
-  const monthlyAverageExpense = totalExpenses / (transactions.value.length > 0 ? 1 : 1); 
-  const remainingCash = balance.value;
-  const runwayMonths = monthlyAverageExpense > 0 ? Math.floor(remainingCash / monthlyAverageExpense) : '∞';
-
-  return {
-    percentage: consumptionPercentage,
-    runway: runwayMonths,
-    isCritical: consumptionPercentage > 80
-  };
-});
-
-const submitEntry = async () => {
-  if (newEntry.value.amount <= 0 || !newEntry.value.label) {
-    return triggerToast("Veuillez remplir correctement le libellé et le montant.", "error");
-  }
-  
-  // Logique automatique de catégorie selon le plan OHADA
-  let finalCategory = 'expense';
-  if (newEntry.value.account_code.startsWith('7') || newEntry.value.account_code.startsWith('1')) {
-    finalCategory = 'income';
-  }
-
-  const { error } = await supabase.from('finance_transactions').insert([{
-    transaction_ref: `FIN-${Date.now()}`,
-    companyref: userStore.user.company.companyref,
-    amount: newEntry.value.amount,
-    label: newEntry.value.label,
-    category: finalCategory,
-    account_code: newEntry.value.account_code,
-    created_at: new Date()
-  }]);
-
-  if (!error) {
-    // Reset et rafraîchissement
-    showManualForm.value = false;
-    newEntry.value = { label: '', amount: 0, account_code: '601' };
-    await fetchAccountingData();
-  } else {
-    triggerToast("Erreur lors de l'enregistrement : " + error.message, "error");
-  }
-};
-
-// Fonction pour regrouper les transactions par Classe OHADA (le premier chiffre du code)
-const transactionsByClass = computed(() => {
-  const groups = {
-    'Classe 1 (Capitaux)': 0,
-    'Classe 6 (Charges)': 0,
-    'Classe 7 (Produits)': 0
-  };
-
-  transactions.value.forEach(t => {
-    // Correction : Ajout de la Classe 1 et des autres
-    if (t.account_code?.startsWith('1')) groups['Classe 1 (Capitaux)'] += t.amount;
-    if (t.account_code?.startsWith('6')) groups['Classe 6 (Charges)'] += t.amount;
-    if (t.account_code?.startsWith('7')) groups['Classe 7 (Produits)'] += t.amount;
-  });
-
-  return groups;
-});
-
-const isClosing = ref(false);
-
-const performMonthlyClosing = async () => {
-  // 1. Demander confirmation
-  const confirmMessage = `Voulez-vous vraiment clôturer le mois de ${selectedMonth.value} ? 
-  Cela figera les rapports financiers.`;
-  
-  if (!confirm(confirmMessage)) return;
-
-  isClosing.value = true;
   try {
-    // 2. Préparation des données du rapport
-    const closingData = {
-      companyref: userStore.user.employe.companyref,
-      closing_month: selectedMonth.value,
-      total_income: totalIncome.value,
-      total_expense: totalExpense.value,
-      net_profit: balance.value,
-      closed_by: userStore.user.name
-    };
-
-    // 3. Enregistrement dans Supabase
-    const { error } = await supabase
-      .from('monthly_closings')
-      .insert([closingData]);
+    const { error } = await supabase.from('finance_transactions').insert([{
+      ...newEntry.value,
+      user_id: userStore.user.id
+    }]);
 
     if (error) throw error;
-
-    triggerToast(`Le mois de ${selectedMonth.value} a été clôturé avec succès !`, "success");
-    
-    // Générer un PDF ou imprimer le rapport ici
-    window.print(); 
-
-  } catch (err) {
-    console.error("Erreur clôture:", err.message);
-    triggerToast("Impossible de clôturer le mois.", "error");
-  } finally {
-    isClosing.value = false;
+    showToast("Écriture comptable validée");
+    showManualForm.value = false;
+    fetchAccountingData();
+    // Reset
+    newEntry.value = { label: '', amount: 0, account_code: '601', category: 'expense', created_at: new Date().toISOString().slice(0, 10) };
+  } catch (e) {
+    showToast("Erreur lors de l'enregistrement", "error");
   }
 };
-// Analyse par classe comptable
-const accountingAnalysis = computed(() => {
-  const analysis = {
-    revenue: { label: 'Chiffre d\'Affaires (Ventes)', amount: 0, code: '7' },
-    purchases: { label: 'Achats de marchandises', amount: 0, code: '60' },
-    salaries: { label: 'Charges de personnel', amount: 0, code: '64' },
-    taxes: { label: 'Impôts et taxes', amount: 0, code: '63' },
-    other: { label: 'Autres charges externes', amount: 0, code: '61/62' }
-  };
 
-  transactions.value.forEach(t => {
-    if (t.account_code?.startsWith('7')) analysis.revenue.amount += t.amount;
-    if (t.account_code?.startsWith('60')) analysis.purchases.amount += t.amount;
-    if (t.account_code?.startsWith('64')) analysis.salaries.amount += t.amount;
-    if (t.account_code?.startsWith('63')) analysis.taxes.amount += t.amount;
-    // ... etc
-  });
+const showToast = (msg, type = 'success') => {
+  toast.value = { show: true, message: msg, type };
+  setTimeout(() => toast.value.show = false, 3000);
+};
 
-  return analysis;
+onMounted(() => {
+  fetchAccountingData(); 
+  fetchBudgetSettings();
 });
+watch(selectedMonth, fetchAccountingData);
 
-const netResult = computed(() => {
-  const products = transactions.value
-    .filter(t => t.account_code?.startsWith('7'))
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const charges = transactions.value
-    .filter(t => t.account_code?.startsWith('6'))
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  return products - charges;
-});
-
-const massAnalysis = computed(() => {
-  return {
-    capital: transactions.value.filter(t => t.account_code?.startsWith('1')).reduce((s, t) => s + t.amount, 0),
-    charges: transactions.value.filter(t => t.account_code?.startsWith('6')).reduce((s, t) => s + t.amount, 0),
-    produits: transactions.value.filter(t => t.account_code?.startsWith('7')).reduce((s, t) => s + t.amount, 0)
-  };
-});
-
-const filteredTransactions = computed(() => {
-  if (filterType.value === 'all') return transactions.value;
-  return transactions.value.filter(t => t.category === filterType.value);
-});
-
-onMounted(fetchAccountingData);
+// Export Grand Livre (Mission Audit du DAF)
+const exportGrandLivre = () => {
+  const headers = "Date,Libelle,Compte,Debit,Credit\n";
+  const rows = transactions.value.map(t => {
+    const isCharge = t.account_code?.startsWith('6');
+    return `${t.created_at},${t.label},${t.account_code},${isCharge ? t.amount : 0},${!isCharge ? t.amount : 0}`;
+  }).join("\n");
+  
+  const blob = new Blob([headers + rows], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.setAttribute('href', url);
+  a.setAttribute('download', `Grand_Livre_${selectedMonth.value}.csv`);
+  a.click();
+};
 </script>
 
 <template>
   <div class="accounting-container">
+    <Transition name="slide-fade">
+      <div v-if="toast.show" :class="['toast-popup', toast.type]">{{ toast.message }}</div>
+    </Transition>
+
     <header class="accounting-header">
-      <h1>Comptabilité & Flux</h1>
-      <button class="btn-export" @click="exportToCSV">Exporter CSV</button>
+      <div class="header-info">
+        <h1>Supervision Comptable</h1>
+        <p class="subtitle">Conformité OHADA & États Financiers</p>
+      </div>
+      <div class="header-actions">
+        <div class="date-picker-wrapper">
+          <label>Période d'analyse :</label>
+          <input 
+            type="date" 
+            v-model="selectedMonth" 
+            class="month-selector"
+          />
+        </div>
+        <div class="btn-group">
+          <button @click="showManualForm = true" class="btn-primary">+ Écriture Manuelle</button>
+          <button @click="exportGrandLivre" class="btn-secondary">Exporter Grand Livre</button>
+        </div>
+      </div>
     </header>
-    <div class="closing-section card">
-      <div class="closing-info">
-        <h3>Clôture de période : {{ selectedMonth }}</h3>
-        <p>En clôturant ce mois, vous validez un profit net de : 
-          <strong :class="balance >= 0 ? 'text-success' : 'text-danger'">
-            {{ balance}} XAF
-          </strong>
-        </p>
-      </div>
-      <button 
-        @click="performMonthlyClosing" 
-        class="btn-close-month"
-        :disabled="isClosing || transactions.length === 0"
-      >
-        {{ isClosing ? 'Traitement...' : 'Clôturer le mois' }}
-      </button>
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card treasury">
-        <span class="label">Trésorerie Disponible (Cash)</span>
-        <h2 :class="balance >= 0 ? 'text-success' : 'text-danger'">
-          {{ balance.toLocaleString() }} XAF
-        </h2>
-        <small>Inclut Capital (Classe 1) + Ventes</small>
-      </div>
-      
-      <div class="stat-card result">
-        <span class="label">Résultat d'Exploitation</span>
+
+    <section class="financial-status-grid">
+      <div class="status-card result">
+        <span class="label">Résultat Net (Produits - Charges)</span>
         <h2 :class="netResult >= 0 ? 'text-success' : 'text-danger'">
-          {{ netResult.toLocaleString() }} XAF
+          {{ netResult.toLocaleString() }} <small>XAF</small>
         </h2>
-        <small>Produits (Cl. 7) - Charges (Cl. 6)</small>
+        <div class="status-indicator" :style="{ width: '100%', background: netResult >= 0 ? '#10b981' : '#ef4444' }"></div>
       </div>
 
-      <div class="stat-card capital">
-        <span class="label">Capitaux Propres</span>
-        <h2>{{ massAnalysis.capital.toLocaleString() }} XAF</h2>
-        <small>Investissements initiaux (Cl. 1)</small>
+      <div class="status-card analytic">
+        <span class="label">Capacité d'Autofinancement (CAF)</span>
+        <h2 class="text-primary">{{ cafValue.toLocaleString() }} <small>XAF</small></h2>
+        <p class="hint">Indicateur de survie économique</p>
       </div>
-    </div>
-    <div class="burn-rate-section card" v-if="massAnalysis.capital > 0">
-      <div class="burn-header">
-        <h3><AppIcon name="FIRE" size="20" /> Analyse de Survie (Burn Rate)</h3>
-        <span class="runway-badge">Autonomie estimée : {{ burnRateAnalysis.runway }} mois</span>
-      </div>
-      
-      <div class="progress-container">
-        <div class="progress-bar">
-          <div 
-            class="progress-fill" 
-            :style="{ width: burnRateAnalysis.percentage + '%' }"
-            :class="{ 'critical': burnRateAnalysis.isCritical }"
-          ></div>
-        </div>
-        <div class="progress-labels">
-          <span>Capital consommé : {{ burnRateAnalysis.percentage }}%</span>
-          <span>Total Charges : {{ massAnalysis.charges.toLocaleString() }} XAF</span>
-        </div>
-      </div>
-      
-      <p v-if="burnRateAnalysis.isCritical" class="warning-msg">
-        <AppIcon name="WARNING" size="20" /> Attention : Vous avez consommé plus de 80% de votre capital initial.
-      </p>
-    </div>
-    <div class="accounting-grid">
-      <div class="p-l-statement card">
-        <h3>Compte de Résultat Simplifié</h3>
-        <div class="pl-row">
-          <span>Ventes (701...)</span>
-          <span class="text-success">+ {{ accountingAnalysis.revenue.amount }} XAF</span>
-        </div>
-        <div class="pl-row">
-          <span>Achats (60...)</span>
-          <span class="text-danger">- {{ accountingAnalysis.purchases.amount }} XAF</span>
-        </div>
-        <div class="pl-row">
-          <span>Salaires (64...)</span>
-          <span class="text-danger">- {{ accountingAnalysis.salaries.amount }} XAF</span>
-        </div>
-        <hr>
-        <div class="pl-row total">
-          <strong>RÉSULTAT NET</strong>
-          <strong :class="netResult >= 0 ? 'text-success' : 'text-danger'">
-            {{ netResult }} XAF
-          </strong>
-        </div>
-      </div>
+    </section>
 
-      <div class="expense-pie card">
-        <canvas ref="pieChart"></canvas>
-      </div>
-    </div>
-
-    <div class="table-section">
-      <div class="table-controls">
-        <div class="filters">
-          <button :class="{ active: filterType === 'all' }" @click="filterType = 'all'">Tout</button>
-          <button :class="{ active: filterType === 'income' }" @click="filterType = 'income'">Revenus</button>
-          <button :class="{ active: filterType === 'expense' }" @click="filterType = 'expense'">Dépenses</button>
+    <section class="ohada-balance card-main">
+      <h3>Ventilation par Classe OHADA</h3>
+      <div class="classes-grid">
+        <div v-for="cl in ohadaClasses" :key="cl.code" class="class-item">
+          <div class="class-info">
+            <span class="cl-code">Cl. {{ cl.code }}</span>
+            <span class="cl-label">{{ cl.label }}</span>
+          </div>
+          <span class="cl-amount">{{ (classBreakdown[cl.code] || 0).toLocaleString() }} XAF</span>
         </div>
       </div>
+    </section>
 
-      <div class="action-bar">
-        <button @click="showManualForm = !showManualForm" class="btn-close-month">
-          {{ showManualForm ? 'Fermer' : '+ Nouvelle Écriture OHADA' }}
+    <section class="budget-planning card-main">
+      <div class="section-header">
+        <div class="title-group">
+          <h3>Budget de l'Exercice {{ currentYear }}</h3>
+        </div>
+        <button @click="Object.assign(tempBudget, budgetSettings); showBudgetModal = true" class="btn-config">
+          ⚙️ Configurer les enveloppes
         </button>
       </div>
 
-        <div v-if="showManualForm" class="quick-form-container">
-        <div class="form-card">
-          <div class="form-header">
-            <h3>➕ Nouvelle Écriture Comptable</h3>
-            <p>Système OHADA - Enregistrement en base de données</p>
+      <div class="budget-grid">
+        <div v-for="item in budgetExecution" :key="item.key" class="budget-item-card">
+          <div class="budget-info">
+            <span class="budget-label">{{ item.label }}</span>
+            <span class="budget-amounts">
+              <strong>{{ item.spent.toLocaleString() }}</strong> / {{ item.limit.toLocaleString() }} XAF
+            </span>
           </div>
           
-          <div class="form-body">
-            <div class="input-row">
-              <div class="input-group full">
-                <label>Libellé de l'opération</label>
-                <input v-model="newEntry.label" placeholder="ex: Apport en capital initial" class="custom-input">
-              </div>
-            </div>
-
-            <div class="input-row split">
-              <div class="input-group">
-                <label>Montant (XAF)</label>
-                <div class="amount-wrapper">
-                  <input type="number" v-model="newEntry.amount" placeholder="0" class="custom-input amount">
-                  <span class="currency-label">XAF</span>
-                </div>
-              </div>
-
-              <div class="input-group">
-                <label>Compte OHADA</label>
-                <select v-model="newEntry.account_code" class="custom-select">
-                  <option v-for="c in ohadaCommonCodes" :key="c.code" :value="c.code">
-                    {{ c.code }} - {{ c.label }}
-                  </option>
-                </select>
-              </div>
-            </div>
+          <div class="progress-track">
+            <div 
+              class="progress-fill" 
+              :class="{ 'near-limit': item.percent > 80, 'over-limit': item.percent > 100 }"
+              :style="{ width: Math.min(item.percent, 100) + '%' }"
+            ></div>
           </div>
-
-          <div class="form-footer">
-            <button @click="showManualForm = false" class="btn-cancel">Annuler</button>
-            <button @click="submitEntry" class="btn-save" :disabled="loading">
-              {{ loading ? 'Enregistrement...' : 'Valider l\'écriture' }}
-            </button>
+          
+          <div class="budget-footer">
+            <span :class="{ 'danger-text': item.remaining < 0 }">
+              {{ item.remaining < 0 ? 'Dépassement' : 'Reste' }} : {{ Math.abs(item.remaining).toLocaleString() }} XAF
+            </span>
+            <span>{{ item.percent.toFixed(0) }}%</span>
           </div>
         </div>
       </div>
-      <div v-if="loading" class="loader"><Spinner /></div>
-      <div v-else>
-        <table class="finance-table desktop-only">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Libellé</th>
-              <th>Projet</th>
-              <th>Catégorie</th>
-              <th>Montant</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in filteredTransactions" :key="item.id">
-              <td>{{ new Date(item.created_at) }}</td>
-              <td>{{ item.label }}</td>
-              <td>{{ item.project?.projectname || 'Hors projet' }}</td>
-              <td>
-                <span :class="['badge', item.category]">
-                  {{ item.category === 'income' ? 'Revenu' : 'Dépense' }}
-                </span>
-              </td>
-              <td :class="item.category === 'income' ? 'text-success' : 'text-danger'">
-                <strong>{{ item.amount }} €</strong>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="mobile-emp-grid">
-          <div v-for="item in filteredTransactions" :key="item.id" class="emp-card-mobile">
-            <div class="card-header">
-              <span>{{ new Date(item.created_at) }}</span>
-              <span :class="['badge', item.category]">
-                {{ item.category === 'income' ? 'Revenu' : 'Dépense' }}
-              </span>
-            </div>
-            <div class="card-body">
-              <h4>{{ item.label }}</h4>
-              <p>{{ item.project?.projectname || 'Hors projet' }}</p>
-            </div>
-            <div class="card-footer">
-              <strong :class="item.category === 'income' ? 'text-success' : 'text-danger'">
-                {{ item.amount }} XAF
-              </strong>
-            </div>
+    </section>
+
+    <div v-if="showBudgetModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Objectifs Budgétaires {{ currentYear }}</h3>
+          <button @click="showBudgetModal = false" class="btn-close">&times;</button>
+        </div>
+        
+        <form @submit.prevent="saveBudgetSettings" class="budget-form">
+          <div v-for="(val, key) in tempBudget" :key="key" class="form-group">
+            <label>{{ key.replace(/_/g, ' ') }} (XAF)</label>
+            <input v-model.number="tempBudget[key]" type="number" />
           </div>
+          
+          <div class="modal-actions">
+            <button type="button" @click="showBudgetModal = false" class="btn-secondary">Annuler</button>
+            <button type="submit" class="btn-primary">Mettre à jour la base</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <section class="journal-section card-main">
+      <div class="section-header">
+        <h3>Journal Général</h3>
+        <div class="table-filters">
+          <button :class="{ active: filterType === 'all' }" @click="filterType = 'all'">Tout</button>
+          <button :class="{ active: filterType === 'charges' }" @click="filterType = 'charges'">Charges (Cl. 6)</button>
+          <button :class="{ active: filterType === 'produits' }" @click="filterType = 'produits'">Produits (Cl. 7)</button>
         </div>
       </div>
-      
+
+      <div v-if="loading" class="loader-container">
+        <Spinner />
+        <p>Génération des écritures...</p>
+      </div>
+
+      <table v-else class="accounting-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Compte</th>
+            <th>Libellé</th>
+            <th>Débit (Charge)</th>
+            <th>Crédit (Produit)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="t in filteredTransactions" :key="t.id">
+            <td data-label="Date">{{ new Date(t.created_at).toLocaleDateString() }}</td>
+            <td data-label="Compte"><span class="badge-code">{{ t.account_code || 'N/A' }}</span></td>
+            <td data-label="Libellé">{{ t.label }}</td>
+            <td data-label="Débit" class="text-danger">
+              {{ t.account_code?.startsWith('6') ? t.amount.toLocaleString() : '-' }}
+            </td>
+            <td data-label="Crédit" class="text-success">
+              {{ t.account_code?.startsWith('7') || t.account_code?.startsWith('1') ? t.amount.toLocaleString() : '-' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div v-if="showManualForm" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Passer une écriture comptable</h3>
+          <button @click="showManualForm = false" class="btn-close">&times;</button>
+        </div>
+        <form @submit.prevent="submitAccountingEntry">
+          <div class="form-group">
+            <label>Libellé de l'opération</label>
+            <input v-model="newEntry.label" type="text" placeholder="Ex: Vente de marchandises, Salaire Mars..." required />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Code OHADA</label>
+              <select v-model="newEntry.account_code">
+                <option value="601">601 - Achats de marchandises</option>
+                <option value="661">661 - Rémunérations directes (Salaires)</option>
+                <option value="701">701 - Ventes de marchandises</option>
+                <option value="101">101 - Capital social</option>
+                <option value="401">401 - Fournisseurs</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Montant (XAF)</label>
+              <input v-model="newEntry.amount" type="number" required />
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" @click="showManualForm = false" class="btn-secondary">Annuler</button>
+            <button type="submit" class="btn-primary">Valider l'écriture</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.accounting-container { padding: 2rem; }
-.accounting-header { display: flex; justify-content: space-between; margin-bottom: 2rem; }
-
-.stats-grid { 
-  display: grid; 
-  grid-template-columns: repeat(3, 1fr); 
-  gap: 1.5rem; 
-  margin-bottom: 2rem; 
+/* --- CONFIGURATION DE BASE --- */
+.accounting-container {
+  padding: 20px;
+  background-color: #f1f5f9;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
 }
 
-.stat-card { 
-  background: white; 
-  padding: 1.5rem; 
-  border-radius: 12px; 
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+.card-main {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 25px;
 }
 
-.label { color: #64748b; font-size: 0.9rem; font-weight: 500; }
-.positive { color: #10b981; }
-.negative { color: #ef4444; }
-
-.table-section { background: white; border-radius: 12px; padding: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-
-.filters { display: flex; gap: 10px; margin-bottom: 1.5rem; }
-.filters button { 
-  padding: 8px 16px; border-radius: 20px; border: 1px solid #e2e8f0; 
-  background: white; cursor: pointer; transition: 0.3s;
-}
-.filters button.active { background: #1e293b; color: white; border-color: #1e293b; }
-
-.finance-table { width: 100%; border-collapse: collapse; }
-.finance-table th { text-align: left; padding: 12px; border-bottom: 2px solid #f1f5f9; color: #64748b; }
-.finance-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
-
-.badge { padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; }
-.income { background: #dcfce7; color: #166534; }
-.expense { background: #fee2e2; color: #991b1b; }
-
-.text-success { color: #10b981; }
-.text-danger { color: #ef4444; }
-.closing-section {
+/* --- EN-TÊTE --- */
+.accounting-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.subtitle { color: #64748b; font-size: 0.9rem; margin-top: 4px; }
+
+/* --- ÉTATS FINANCIERS (KPI) --- */
+.financial-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 25px;
+}
+
+.status-card {
+  background: white;
+  padding: 25px;
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.status-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  transition: width 0.3s ease;
+}
+
+.hint { font-size: 0.75rem; color: #94a3b8; margin-top: 8px; }
+
+/* --- VENTILATION OHADA --- */
+.classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.class-item {
   background: #f8fafc;
-  border-left: 5px solid #1e293b;
-  margin-bottom: 2rem;
-}
-
-.btn-close-month {
-  background-color: #1e293b;
-  color: white;
-  border: none;
-  padding: 12px 24px;
+  padding: 15px;
   border-radius: 10px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: all 0.3s ease;
+  border: 1px solid #e2e8f0;
 }
 
-.btn-close-month:hover {
-  background-color: #334155;
+.class-info { display: flex; flex-direction: column; margin-bottom: 8px; }
+.cl-code { font-weight: 800; color: #1e293b; font-size: 0.8rem; }
+.cl-label { font-size: 0.75rem; color: #64748b; }
+.cl-amount { font-weight: 700; color: #334155; }
+
+/* --- FILTRES DU JOURNAL --- */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.table-filters {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.table-filters button {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.table-filters button.active {
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  color: #3b82f6;
+}
+
+/* --- TABLEAU & RESPONSIVE (LOGIQUE CEDRIC) --- */
+.accounting-table { width: 100%; border-collapse: collapse; }
+.accounting-table th { text-align: left; padding: 12px; border-bottom: 2px solid #f1f5f9; color: #475569; font-size: 0.85rem; }
+.accounting-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+
+.badge-code { background: #334155; color: white; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.8rem; }
+
+@media (max-width: 768px) {
+  .accounting-table thead { display: none; }
+  .accounting-table tr {
+    display: block;
+    background: white;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    padding: 15px;
+    border: 1px solid #e2e8f0;
+  }
+  .accounting-table td {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border: none;
+  }
+  .accounting-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: #94a3b8;
+    font-size: 0.8rem;
+  }
+  
+  .header-actions { width: 100%; }
+  .btn-group { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 10px; }
+}
+
+/* --- BOUTONS ET INPUTS --- */
+.btn-primary { background: #1e293b; color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.btn-secondary { background: white; color: #1e293b; border: 1px solid #e2e8f0; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.month-selector { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; outline: none; }
+
+/* --- TEXT COLORS --- */
+.text-success { color: #10b981; }
+.text-danger { color: #ef4444; }
+.text-primary { color: #3b82f6; }
+
+/* --- MODAL --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-content { background: white; padding: 25px; border-radius: 16px; width: 90%; max-width: 500px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.form-group { display: flex; flex-direction: column; margin-bottom: 15px; }
+.form-group label { font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; }
+input, select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+
+/* --- TOAST --- */
+.toast-popup {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  z-index: 1100;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
-
-@media print {
-  .btn-close-month, .filters, .action-bar { display: none; }
-  .card { border: 1px solid #eee; box-shadow: none; }
+.toast-popup.success { background: #10b981; }
+.toast-popup.error { background: #ef4444; }
+.date-picker-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.burn-rate-section {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
+.date-picker-wrapper label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.month-selector {
+  padding: 10px 15px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #1e293b;
   background: white;
+  cursor: pointer;
+}
+
+.month-selector:focus {
+  border-color: #3b82f6;
+  outline: none;
+}
+
+.budget-planning {
+  margin-top: 2rem;
+  border-top: 4px solid #1e293b;
+}
+
+.btn-config {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.budget-item-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  padding: 15px;
   border-radius: 12px;
 }
 
-.burn-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.runway-badge {
-  background: #fef3c7;
-  color: #92400e;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-weight: bold;
-  font-size: 0.85rem;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 12px;
+.progress-track {
   background: #f1f5f9;
-  border-radius: 10px;
+  height: 10px;
+  border-radius: 5px;
+  margin: 10px 0;
   overflow: hidden;
-  margin-bottom: 8px;
 }
 
 .progress-fill {
   height: 100%;
-  background: #3b82f6;
-  transition: width 0.5s ease-in-out;
+  background: #10b981;
+  transition: width 0.6s ease;
 }
 
-.progress-fill.critical {
-  background: #ef4444;
-}
+.progress-fill.near-limit { background: #f59e0b; }
+.progress-fill.over-limit { background: #ef4444; }
 
-.progress-labels {
+.budget-footer {
   display: flex;
   justify-content: space-between;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #64748b;
+  font-weight: 600;
 }
 
-.warning-msg {
-  color: #ef4444;
-  font-size: 0.85rem;
-  margin-top: 10px;
-  font-weight: bold;
-}
-/* Conteneur et Animation */
-.quick-form-container {
-    margin-top: 1.5rem;
-    margin-bottom: 2rem;
-    animation: slideDown 0.3s ease-out;
+.danger-text { color: #ef4444; }
+
+.budget-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
 }
 
-@keyframes slideDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.form-card {
-    background: #ffffff;
-    border-radius: 16px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-}
-
-/* Header du formulaire */
-.form-header {
-    padding: 1.25rem 1.5rem;
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.form-header h3 {
-    margin: 0;
-    color: #1e293b;
-    font-size: 1.1rem;
-}
-
-.form-header p {
-    margin: 4px 0 0;
-    color: #64748b;
-    font-size: 0.85rem;
-}
-
-/* Corps du formulaire */
-.form-body {
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-}
-
-.input-row {
-    display: flex;
-    gap: 1.25rem;
-}
-
-.input-row.split > div {
-    flex: 1;
-}
-
-.input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.input-group label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #475569;
-}
-
-/* Inputs personnalisés */
-.custom-input, .custom-select {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    font-size: 0.95rem;
-    transition: all 0.2s;
-    background-color: #fff;
-    color: #1e293b;
-}
-
-.custom-input:focus, .custom-select:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* Gestion du montant avec label monnaie */
-.amount-wrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.amount-wrapper .amount {
-    padding-right: 50px;
-    font-weight: 700;
-    color: #1e293b;
-}
-
-.currency-label {
-    position: absolute;
-    right: 12px;
-    font-size: 0.8rem;
-    font-weight: bold;
-    color: #94a3b8;
-}
-
-/* Footer et Boutons */
-.form-footer {
-    padding: 1.25rem 1.5rem;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-}
-
-.btn-cancel {
-    background: white;
-    border: 1px solid #cbd5e1;
-    padding: 10px 20px;
-    border-radius: 8px;
-    color: #64748b;
-    cursor: pointer;
-    font-weight: 500;
-    transition: 0.2s;
-}
-
-.btn-cancel:hover {
-    background: #f1f5f9;
-    color: #1e293b;
-}
-
-.btn-save {
-    background: #1e293b;
-    color: white;
-    border: none;
-    padding: 10px 24px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: 0.2s;
-}
-
-.btn-save:hover:not(:disabled) {
-    background: #334155;
-    transform: translateY(-1px);
-}
-
-.btn-save:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-/* Responsive */
-@media (max-width: 640px) {
-    .input-row.split {
-        flex-direction: column;
-    }
-}
-@media (max-width: 768px) {
-  .desktop-only{
-    display: none;
-  }
-  /* 1. Navigation par onglets (Filtres) */
-  .table-controls {
-    overflow-x: auto; /* Permet de scroller les boutons horizontalement */
-    white-space: nowrap;
-    padding-bottom: 10px;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  .filters {
-    display: flex;
-    gap: 8px;
-  }
-
-  .filters button {
-    padding: 8px 15px;
-    font-size: 0.85rem;
-    flex-shrink: 0; /* Empêche les boutons de rétrécir */
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr; /* Affichage en colonne pour mobile */
-  }
-  .stats-grid .stats-card {
-    margin-bottom: 1.5rem;
-  }
-  /* 2. Transformation de l'affichage des employés */
-  .emp-table, .emp-table thead {
-    display: none; /* On cache le tableau classique */
-  }
-
-  /* On crée une vue en grille de cartes pour mobile */
-  .mobile-emp-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 15px;
-    margin-top: 20px;
-  }
-
-  .emp-card-mobile {
-    background: white;
-    border-radius: 12px;
-    padding: 15px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    border: 1px solid #edf2f7;
-  }
-
-  .emp-header-mobile {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-
-  .emp-details-mobile {
-    font-size: 0.9rem;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    padding: 10px 0;
-    border-top: 1px dashed #e2e8f0;
-  }
-
-  /* 3. Zone de recherche/création */
-  .dept-creation-zone {
-    padding: 15px;
-  }
-
-  .dept-form {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .dept-input {
-    width: 100%;
-  }
-
-  /* 4. Modale de paie mobile */
-  .pay-modal-content {
-    width: 95% !important;
-    padding: 15px;
-  }
+@media (max-width: 600px) {
+  .budget-form { grid-template-columns: 1fr; }
 }
 </style>

@@ -7,7 +7,6 @@
     import ProjectProgressChart from '../components/ProjectProgressChart.vue';
     import { useRoute } from 'vue-router'
     
-    console.log("Démarrage du composant projet");
     const props = defineProps({
         deptName: {
             type: String,
@@ -853,7 +852,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                 </div>
                 <div class="dashboard-ctn" v-show="isDashboardOpen">
                     <h2>Project Dashboard</h2>
-                    <p v-if="userStore.currentProject.project">
+                    <div v-if="userStore.currentProject.project">
                         <div class="finance-kpi-bar">
                             <div class="kpi-card" :class="projectStats.margin < 0 ? 'bg-red-light' : ''">
                                 <label>Budget Consommé</label>
@@ -973,7 +972,7 @@ const calculateTimeRemaining = (startDate, endDate) => {
                                 <p>No tasks available</p>
                             </div>
                         </div>
-                    </p>
+                    </div>
                     <p v-else>
                         Select a project to view details
                     </p>
