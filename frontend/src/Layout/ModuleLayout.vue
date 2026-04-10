@@ -6,6 +6,7 @@ import { ref, onMounted, computed } from 'vue';
 import Header from '../components/Header.vue'
 import Chat from '../components/Chat.vue'
 import FeedbackModal from '../components/FeedBack.vue';
+import AIAssistant from '../components/AIAssistant.vue';
 
 const feedbackRef = ref(null);
 
@@ -153,6 +154,7 @@ const logout = () => {
         <router-view />
         <Chat />
       </section>
+      <AIAssistant />
     </main>
   </div>
   <FeedbackModal ref="feedbackRef" />

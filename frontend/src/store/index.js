@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import supabase from '../services/supabaseConfig.js'
 
 export const useUserStore = defineStore('user', () => {
-  console.log("Démarrage du store utilisateur");
   const user = ref(null);
     const isAuthenticated = ref(false);
     const isLoading = ref(true);
@@ -32,7 +31,6 @@ export const useUserStore = defineStore('user', () => {
         // 4. On enregistre dans le localStorage
         localStorage.setItem('user', JSON.stringify(sessionData));
         
-        console.log("Session enregistrée avec les magasins:", sessionData);
 
     } catch (err) {
         console.error("Erreur lors de la récupération des magasins pendant l'auth:", err);
@@ -107,7 +105,6 @@ export const useUserStore = defineStore('user', () => {
 
 // Action pour charger TOUTES les données de tous les projets de l'utilisateur
     const getProjects = async (deptRef) => {
-      console.log("Démarrage du store utilisateur: récupération des projets");
   try {
     if (!deptRef) {
       projects.value = [];
@@ -163,7 +160,6 @@ export const useUserStore = defineStore('user', () => {
 
     projects.value = detailedProjects;
 
-        console.log("liste des projets: ", projects.value)
   } catch (err) {
     console.error('Erreur chargement projets:', err);
   }
