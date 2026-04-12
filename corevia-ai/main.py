@@ -10,10 +10,15 @@ import os
 
 app = FastAPI()
 
+origins = [
+    "localhost:5173",
+    "https://corevia-ai-backend.onrender.com"
+]
+
 # TRÈS IMPORTANT : Autoriser Vue.js à parler à Python (CORS)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # En prod, on mettra l'URL de ton appli Vue
+    allow_origins=origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
