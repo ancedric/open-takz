@@ -40,7 +40,38 @@ def fetch_project_data(company_ref: str):
         .execute()
     return projects_res.data, tasks_res.data
 
-def generate_insights(ref_entreprise: str):
+def check_overdue_assignments():
+    """Identifie les tâches en retard et leurs responsables"""
+    # 1. Récupérer les tâches non terminées dont la date est dépassée
+    # (Supposons que ta table task a un champ 'deadline' et 'status')
+    now = datetime.now().isoformat()
+    
+    overdue_tasks = supabase.table("task") \
+        .select("taskref, taskname, enddate, status") \
+        .lt("enddate", now) \
+        .neq("status", "completed") \
+        .execute()
+
+    notifications_to_send = []
+
+    for task in overdue_tasks.data:
+        # 2. Trouver qui est assigné à cette tâche
+        assignments = supabase.table("assignments") \
+            .select("userref, collabref") \
+            .eq("taskref", task['taskref']) \
+            .execute()
+
+        for assign in assignments.data:
+            notifications_to_send.append({
+                "user_id": assign['userref'],
+                "title": "⏰ Rappel de retard",
+                "message": f"La tâche '{task['taskname']}' est en retard. Merci de mettre à jour son statut.",
+                "task_ref": task['taskref']
+            })
+            
+    return notifications_to_send
+
+def generate_insights(ref_entreprise: str, current_user_ref: str):
     current_year = datetime.now().year
     insights = []
     
@@ -124,6 +155,17 @@ def generate_insights(ref_entreprise: str):
                     "title": f"Bravo : {p['projectname']}",
                     "message": f"Projet presque fini ! {progress_pct:.0f}% de complétion."
                 })
+    # Ajout des rappels personnels
+    all_notifs = check_overdue_assignments()
+    # On ne montre à l'utilisateur que ce qui le concerne lui
+    user_reminders = [n for n in all_notifs if n['user_id'] == current_user_ref]
+    
+    for r in user_reminders:
+        insights.append({
+            "type": "danger",
+            "title": r['title'],
+            "message": r['message']
+        })
 
     return insights
 

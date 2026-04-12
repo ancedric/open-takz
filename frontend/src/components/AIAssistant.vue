@@ -28,7 +28,7 @@ const fetchIASuggestions = async () => {
   try {
     if (!userStore.user?.company) return;
     const currentRef = userStore.user.company.companyref; 
-    const response = await axios.get(`http://localhost:8000/ai/suggestions?entreprise_ref=${currentRef}`);
+    const response = await axios.get(`http://localhost:8000/ai/suggestions?entreprise_ref=${currentRef}&user_ref=${userStore.user.user.userref}`);
     
     if (JSON.stringify(aiInsights.value) !== JSON.stringify(response.data.data)) {
       if (aiInsights.value.length > 0) hasNewData.value = true;

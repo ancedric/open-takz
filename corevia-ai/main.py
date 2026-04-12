@@ -22,13 +22,13 @@ app.add_middleware(
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 @app.get("/ai/suggestions")
-async def get_ai_suggestions(entreprise_ref: str):
+async def get_ai_suggestions(entreprise_ref: str, user_ref: str):
     """
     Ici, 'entreprise_ref' est récupéré automatiquement depuis l'URL envoyée par Vue.js
-    Exemple d'appel : http://localhost:8000/ai/suggestions?entreprise_ref=MA_BOUTIQUE_01
+    Exemple d'appel : http://localhost:8000/ai/suggestions?entreprise_ref=MA_BOUTIQUE_01&user_ref=USER_123
     """
     # L'IA fait le travail toute seule avec la ref reçue
-    suggestions = generate_insights(entreprise_ref)
+    suggestions = generate_insights(entreprise_ref, user_ref)
     
     return {
         "status": "success",
