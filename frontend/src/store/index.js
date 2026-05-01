@@ -3,9 +3,13 @@ import { ref } from 'vue'
 import supabase from '../services/supabaseConfig.js'
 
 export const useUserStore = defineStore('user', () => {
-  const user = ref(null);
-    const isAuthenticated = ref(false);
-    const isLoading = ref(true);
+  // 1. On essaie de récupérer immédiatement les données du localStorage (Synchrone)
+  const _savedUser = localStorage.getItem('user');
+  const user = ref(_savedUser ? JSON.parse(_savedUser) : null);
+  
+  // Si on a un user en cache, on est techniquement authentifié en attendant la vérification
+  const isAuthenticated = ref(!!_savedUser); 
+  const isLoading = ref(true);
 
     // Nouvelles variables d'état pour les projets
     const projects = ref([]);
@@ -39,63 +43,52 @@ export const useUserStore = defineStore('user', () => {
 };
 
   const init = async () => {
-  const _sessionRaw = localStorage.getItem('user');
-  
-  if (_sessionRaw) {
+    isLoading.value = true;
+    const _sessionRaw = localStorage.getItem('user');
+    
+    if (!_sessionRaw) {
+      isLoading.value = false;
+      return;
+    }
+    console.log('Session trouvée dans localStorage, tentative de restauration...', JSON.parse(_sessionRaw));
     try {
       const session = JSON.parse(_sessionRaw);
       
-      // 1. Vérification de l'utilisateur et récupération des données fraîches
-      // On utilise une jointure pour récupérer l'employé et la compagnie d'un coup
       const { data, error } = await supabase
         .from('user')
         .select(`
           *,
-          employe (*),
-          company:companyref (*)
+          employe (*, company:companyref (*)),
+          
         `)
         .eq('email', session.user.email)
         .single();
 
       if (data && !error) {
-        // 2. On récupère les magasins de la compagnie récupérée
-        const { data: stores } = await supabase
-          .from('inventory_stores')
-          .select('*')
-          .eq('companyref', data.company.ref)
-          .eq('is_active', true);
-
-        // 3. On reconstruit l'objet session complet
-        const fullSession = {
+        // CORRECTION ICI : Reconstruction de l'objet que tu utilisais sans le définir
+        const updatedSession = {
           user: { 
-            id: data.id, 
+            userref: data.userref, // Assure-toi que c'est bien userref
             email: data.email, 
-            username: data.username, 
-            avatar_url: data.avatar_url 
+            firstname: data.firstname, 
+            lastname: data.lastname,
+            profilephotourl: data.profilephotourl
           },
-          employe: data.employe,
-          company: {
-            ...data.company,
-            stores: stores || [] // On ré-injecte les magasins ici
-          }
+          employe: data.employe[0] || data.employe, // Supabase renvoie parfois un array selon la relation
+          company: data.employe.company[0] || data.employe.company // Idem pour la company
         };
 
-        user.value = fullSession;
+        user.value = updatedSession;
         isAuthenticated.value = true;
-        
-        // On met à jour le localStorage avec les données fraîches
-        localStorage.setItem('user', JSON.stringify(fullSession));
-        
-      } else {
-        logout();
+        localStorage.setItem('user', JSON.stringify(updatedSession));
       }
     } catch (err) {
-      console.error('Erreur lors de la restauration de la session:', err);
-      logout();
+      console.error('Erreur restauration session:', err);
+      // Ne pas logout ici au premier echec réseau, sinon l'utilisateur est déco par erreur
+    } finally {
+      isLoading.value = false;
     }
-  }
-  isLoading.value = false;
-};
+  };
 
     const logout = () => {
         user.value = null;

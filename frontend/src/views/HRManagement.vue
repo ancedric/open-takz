@@ -4,11 +4,12 @@ import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router';
+import { useI18n } from  'vue-i18n'
 import jsPDF from 'jspdf';
 import { downloadPaySlip } from '../services/pdfGenerator';
 import ConfirmModal from '../components/ConfirmmModal.vue';
 
-
+const {t} = useI18n()
 const toast = ref({ show: false, message: '', type: 'success' });
 
   function triggerToast(message, type = 'success') {
@@ -270,22 +271,22 @@ const validatePayroll = async (employee) => {
     const finalNet = adjustedBrut - socialCharges;
 
     // 3. Dialogue de confirmation détaillé (Pratique pour le RH)
-    const confirmMsg = `SYNTHÈSE DE PAIE : ${employee.user.firstname} ${employee.user.lastname}\n` +
+    const confirmMsg = `${t('hr.pay-synthesis')} : ${employee.user.firstname} ${employee.user.lastname}\n` +
       `-----------------------------------\n` +
-      `Période : ${selectedMonth.value}\n` +
-      `Jours Absence : ${missedDays} j\n` +
-      `Retenue : -${Math.round(absenceDeduction).toLocaleString()} XAF\n
-      -----------------------------------------
-      Salaire de Base : ${employee.salary.toLocaleString()} XAF
-      Retenue Absence (${missedDays}j) : -${absenceDeduction.toLocaleString()} XAF
-      -----------------------------------------
-      BRUT TAXABLE : ${adjustedBrut.toLocaleString()} XAF
-      Retenue CNPS (4,2%) : -${socialCharges.toLocaleString()} XAF
-      -----------------------------------------
-      NET À PAYER : ${Math.round(finalNet).toLocaleString()} XAF`;
+      `${t('hr.period')} : ${selectedMonth.value}\n` +
+      `${t('hr.missed-days')} : ${missedDays} j\n` +
+      `${t('hr.deduction')} : -${Math.round(absenceDeduction).toLocaleString()} XAF\n` +
+      `-----------------------------------------\n` +
+      `${t('hr.base-salary')} : ${employee.salary.toLocaleString()} XAF\n` +
+      `${t('hr.absence-deduction')} : -${absenceDeduction.toLocaleString()} XAF\n` +
+      `-----------------------------------------\n` +
+      `${t('hr.taxable-gross')} : ${adjustedBrut.toLocaleString()} XAF\n` +
+      `${t('hr.social-charges')} : -${socialCharges.toLocaleString()} XAF\n` +
+      `-----------------------------------------\n` +
+      `${t('hr.net-to-pay')} : ${Math.round(finalNet).toLocaleString()} XAF`;
       `-----------------------------------\n` +
-      `NET À VIRER : ${finalNet.toLocaleString()} XAF\n\n` +
-      `Confirmer l'enregistrement et l'envoi en comptabilité ?`;
+      `${t('hr.net-to-transfer')} : ${finalNet.toLocaleString()} XAF\n\n` +
+      `${t('hr.confirm-registration')} ?}`;
 
     if (!confirm(confirmMsg)) return;
 
@@ -495,7 +496,7 @@ const handleAddEmploye = async () => {
         doc.setFontSize(16);
         doc.setTextColor(0);
         doc.setFont('helvetica', 'bold');
-        doc.text(`CONTRAT DE TRAVAIL À DURÉE ${typeContrat === 'CDI' ? 'INDÉTERMINÉE' : 'DÉTERMINÉE'}`, 105, 50, { align: 'center' });
+        doc.text(`${t('hr.contract')} ${typeContrat === 'CDI' ? 'INDÉTERMINÉE' : 'DÉTERMINÉE'}`, 105, 50, { align: 'center' });
 
         // --- CORPS DU TEXTE ---
         doc.setFontSize(11);
@@ -505,9 +506,9 @@ const handleAddEmploye = async () => {
         const margin = 20;
         const maxWidth = 170;
         
-        const intro = `Entre les soussignés :\n\n` +
-                      `L'entreprise ${userStore.user.company.companyname}, représentée par son représentant légal, ci-après désignée "L'Employeur",\n\n` +
-                      `Et M./Mme ${selectedUser.lastname} ${selectedUser.firstname}, résidant à ${selectedUser.city}, ${selectedUser.country}, ci-après désigné(e) "L'Employé(e)".`;
+        const intro = `${t('hr.between')} :\n\n` +
+                      `${t('hr.the-enterprise')} ${userStore.user.company.companyname}, ${t('hr.represented-by-its-legal-representative')} "${t('hr.the-employer')}",\n\n` +
+                      `${t('hr.and-mr-mrs')} ${selectedUser.lastname} ${selectedUser.firstname}, ${t('hr.living-in' )}${selectedUser.city}, ${selectedUser.country}, ${t('hr.designated')} "${t('the-employee')}".`;
 
         const lines = doc.splitTextToSize(intro, maxWidth);
         doc.text(lines, margin, yPos);

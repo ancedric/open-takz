@@ -1,121 +1,121 @@
 <template>
   <div>
     <div class="auth-ctn">
-      <h3>SIGN UP</h3>
+      <h3>{{ t('signup.sign-up') }}</h3>
       <form @submit.prevent="handleSubmit">
         <div class="input-ctn">
-          <div class="label">Type de compte</div>
+          <div class="label">{{t('signup.account-type')}}</div>
           <select class="set-input" v-model="accountType">
-            <option value="owner">Chef d'entreprise</option>
-            <option value="employee">Employé</option>
+            <option value="owner">{{t('signup.manager')}}</option>
+            <option value="employee">{{t('signup.employee')}}</option>
           </select>
         </div>
         <div class="input-ctn">
-          <div class="label">First Name</div>
-          <input type="firstname" class="set-input" v-model="firstname" placeholder="First Name">
+          <div class="label">{{t('signup.first-name')}}</div>
+          <input type="firstname" class="set-input" v-model="firstname" :placeholder="t('signup.first-name')">
         </div>
         <div class="input-ctn">
-          <div class="label">Last Name</div>
-          <input type="lastname" class="set-input" v-model="lastname" placeholder="Last Name">
+          <div class="label">{{t('signup.last-name')}}</div>
+          <input type="lastname" class="set-input" v-model="lastname" :placeholder="t('signup.last-name')">
         </div>
         <div class="input-ctn">
-          <div class="label">Email address</div>
-          <input type="email" class="set-input" v-model="userEmail" placeholder="Email">
+          <div class="label">{{t('signup.email')}}</div>
+          <input type="email" class="set-input" v-model="userEmail" :placeholder="t('signup.email')">
         </div>
         <div class="input-ctn">
-          <div class="label">Password</div>
-          <input :type="showPassword ? 'text' : 'password'"  class="set-input" v-model="userPassword" placeholder="password">
+          <div class="label">{{t('signup.password')}}</div>
+          <input :type="showPassword ? 'text' : 'password'"  class="set-input" v-model="userPassword" :placeholder="t('signup.password')">
         </div>
         <div @click="showPassword = !showPassword" class="hideOrShow">
-            {{ showPassword ? 'Hide password' : 'Show password' }}
+            {{ showPassword ? t('signup.hide-password') : t('signup.show-password') }}
         </div>
         <div class="input-ctn">
-          <div class="label">Phone number</div>
+          <div class="label">{{t('signup.phone-number')}}</div>
           <input type="phone" class="set-input" v-model="phone" placeholder="+xxx xxxxxxxxx">
         </div>
         <div class="input-ctn">
-          <div class="label">Country</div>
+          <div class="label">{{t('signup.country')}}</div>
           <select class="set-input" v-model="country">
-            <option default>Choisissez un pays</option>
-            <option value="Algeria">Algeria</option>
-            <option value="Angola">Angola</option>
-            <option value="Argentina">Argentina</option>
-            <option value="Australia">Australia</option>
-            <option value="Austria">Austria</option>
-            <option value="Belgium">Belgium</option>
-            <option value="Benin">Benin</option>
-            <option value="Botswana">Botswana</option>
-            <option value="Brazil">Brazil</option>
-            <option value="Burkina Faso">Burkina Faso</option>
-            <option value="Burundi">Burundi</option>
-            <option value="Cabo Verde">Cabo Verde</option>
-            <option value="Canada">Canada</option>
-            <option value="Cameroon">Cameroon</option>
-            <option value="Central African Republic">Central African Republic</option>
-            <option value="Chad">Chad</option>
-            <option value="Chile">Chile</option>
-            <option value="China">China</option>
-            <option value="Colombia">Colombia</option>
-            <option value="Congo">Congo</option>
-            <option value="Comoros">Comoros</option>
-            <option value="Congo">Congo</option>
-            <option value="Côte d'Ivoire">Côte d'Ivoire</option>
-            <option value="Czech Republic">Czech Republic</option>
-            <option value="Democratic Republic of the Congo">Democratic Republic of the Congo</option>
-            <option value="Denmark">Denmark</option>
-            <option value="Equatorial Guinea">Equatorial Guinea</option>
-            <option value="Egypt">Egypt</option>
-            <option value="Ethiopia">Ethiopia</option>
-            <option value="France">France</option>
-            <option value="Gabon">Gabon</option>
-            <option value="Ghana">Ghana</option>
-            <option value="India">India</option>
-            <option value="Indonesia">Indonesia</option>
-            <option value="Iran">Iran</option>
-            <option value="Iraq">Iraq</option>
-            <option value="Italy">Italy</option>
-            <option value="Japan">Japan</option>
-            <option value="Kenya">Kenya</option>
-            <option value="Mexico">Mexico</option>
-            <option value="Morocco">Morocco</option>
-            <option value="Nigeria">Nigeria</option>
-            <option value="Pakistan">Pakistan</option>
-            <option value="Peru">Peru</option>
-            <option value="Philippines">Philippines</option>
-            <option value="Portugal">Portugal</option>
-            <option value="Qatar">Qatar</option>
-            <option value="Russia">Russia</option>
-            <option value="Saudi Arabia">Saudi Arabia</option>
-            <option value="South Africa">South Africa</option>
-            <option value="Spain">Spain</option>
-            <option value="Sudan">Sudan</option>
-            <option value="Sweden">Sweden</option>
-            <option value="Switzerland">Switzerland</option>
-            <option value="Thailand">Thailand</option>
-            <option value="Turkey">Turkey</option>
-            <option value="Ukraine">Ukraine</option>
-            <option value="United Kingdom">United Kingdom</option>
-            <option value="United States">United States</option>
-            <option value="Venezuela">Venezuela</option>
-            <option value="Vietnam">Vietnam</option>
-            <option value="Uganda">Uganda</option>
-            <option value="Tanzania">Tanzania</option>
-            <option value="Rwanda">Rwanda</option>
-            <option value="Zambia">Zambia</option>
-            <option value="Zimbabwe">Zimbabwe</option>
+            <option default>{{t('signup.choose-country')}}</option>
+            <option value="Algeria">{{t('signup.algeria')}}</option>
+            <option value="Angola">{{t('signup.angola')}}</option>
+            <option value="Argentina">{{t('signup.argentina')}}</option>
+            <option value="Australia">{{t('signup.australia')}}</option>
+            <option value="Austria">{{t('signup.austria')}}</option>
+            <option value="Belgium">{{t('signup.belgium')}}</option>
+            <option value="Benin">{{t('signup.benin')}}</option>
+            <option value="Botswana">{{t('signup.botswana')}}</option>
+            <option value="Brazil">{{t('signup.brazil')}}</option>
+            <option value="Burkina Faso">{{t('signup.burkina-faso')}}</option>
+            <option value="Burundi">{{t('signup.burundi')}}</option>
+            <option value="Cabo Verde">{{t('signup.cabo-verde')}}</option>
+            <option value="Canada">{{t('signup.canada')}}</option>
+            <option value="Cameroon">{{t('signup.cameroon')}}</option>
+            <option value="Central African Republic">{{t('signup.central-african-republic')}}</option>
+            <option value="Chad">{{t('signup.chad')}}</option>
+            <option value="Chile">{{t('signup.chile')}}</option>
+            <option value="China">{{t('signup.china')}}</option>
+            <option value="Colombia">{{t('signup.colombia')}}</option>
+            <option value="Congo">{{t('signup.congo')}}</option>
+            <option value="Comoros">{{t('signup.comoros')}}</option>
+            <option value="Congo">{{t('signup.congo')}}</option>
+            <option value="Côte d'Ivoire">{{t('signup.côte-d-ivoire')}}</option>
+            <option value="Czech Republic">{{t('signup.czech-republic')}}</option>
+            <option value="Democratic Republic of the Congo">{{t('signup.democratic-republic-of-the-congo')}}</option>
+            <option value="Denmark">{{t('signup.denmark')}}</option>
+            <option value="Equatorial Guinea">{{t('signup.equatorial-guinea')}}</option>
+            <option value="Egypt">{{t('signup.egypt')}}</option>
+            <option value="Ethiopia">{{t('signup.ethiopia')}}</option>
+            <option value="France">{{t('signup.france')}}</option>
+            <option value="Gabon">{{t('signup.gabon')}}</option>
+            <option value="Ghana">{{t('signup.ghana')}}</option>
+            <option value="India">{{t('signup.india')}}</option>
+            <option value="Indonesia">{{t('signup.indonesia')}}</option>
+            <option value="Iran">{{t('signup.iran')}}</option>
+            <option value="Iraq">{{t('signup.iraq')}}</option>
+            <option value="Italy">{{t('signup.italy')}}</option>
+            <option value="Japan">{{t('signup.japan')}}</option>
+            <option value="Kenya">{{t('signup.kenya')}}</option>
+            <option value="Mexico">{{t('signup.mexico')}}</option>
+            <option value="Morocco">{{t('signup.morocco')}}</option>
+            <option value="Nigeria">{{t('signup.nigeria')}}</option>
+            <option value="Pakistan">{{t('signup.pakistan')}}</option>
+            <option value="Peru">{{t('signup.peru')}}</option>
+            <option value="Philippines">{{t('signup.philippines')}}</option>
+            <option value="Portugal">{{t('signup.portugal')}}</option>
+            <option value="Qatar">{{t('signup.qatar')}}</option>
+            <option value="Russia">{{t('signup.russia')}}</option>
+            <option value="Saudi Arabia">{{t('signup.saudi-arabia')}}</option>
+            <option value="South Africa">{{t('signup.south-africa')}}</option>
+            <option value="Spain">{{t('signup.spain')}}</option>
+            <option value="Sudan">{{t('signup.sudan')}}</option>
+            <option value="Sweden">{{t('signup.sweden')}}</option>
+            <option value="Switzerland">{{t('signup.switzerland')}}</option>
+            <option value="Thailand">{{t('signup.thailand')}}</option>
+            <option value="Turkey">{{t('signup.turkey')}}</option>
+            <option value="Ukraine">{{t('signup.ukraine')}}</option>
+            <option value="United Kingdom">{{t('signup.united-kingdom')}}</option>
+            <option value="United States">{{t('signup.united-states')}}</option>
+            <option value="Venezuela">{{t('signup.venezuela')}}</option>
+            <option value="Vietnam">{{t('signup.vietnam')}}</option>
+            <option value="Uganda">{{t('signup.uganda')}}</option>
+            <option value="Tanzania">{{t('signup.tanzania')}}</option>
+            <option value="Rwanda">{{t('signup.rwanda')}}</option>
+            <option value="Zambia">{{t('signup.zambia')}}</option>
+            <option value="Zimbabwe">{{t('signup.zimbabwe')}}</option>
           </select>
         </div>
         <div class="input-ctn">
-          <div class="label">City</div>
-          <input type="city" class="set-input" v-model="city" placeholder="City">
+          <div class="label">{{t('signup.city')}}</div>
+          <input type="city" class="set-input" v-model="city" :placeholder="t('signup.city')">
         </div>
         <div class="input-ctn">
-          <div class="label">Profile Photo</div>
-          <input type="file" class="set-input" v-on:change="onFileChange" placeholder="choose a profile photo">
+          <div class="label">{{t('signup.profile-photo')}}</div>
+          <input type="file" class="set-input" v-on:change="onFileChange" :placeholder="t('signup.choose-profile-photo')">
         </div>
-        <button type="submit" class="auth-btn">{{ submitting ? 'Please wait...' : 'Sign In' }}</button>
-        <p class="switch">Already have an account ? <router-link to="/auth">Sign In</router-link></p>
-        <p class="switch">En vous inscrivant ous acceptez nos <router-link to="/users-conditions">conditions d'utilisation</router-link></p>
+        <button type="submit" class="auth-btn">{{ submitting ? t('signup.please-wait') : t('signup.sign-in') }}</button>
+        <p class="switch">{{t('signup.already-have-account')}}<router-link to="/auth">{{t('signup.sign-in')}}</router-link></p>
+        <p class="switch">{{ t('login.accept-terms') }} <router-link to="/users-conditions">{{ t('login.terms-of-use') }}</router-link></p>
       </form>
     </div>
     
@@ -127,10 +127,12 @@
   
   <script setup>
   import { ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import supabase from '../services/supabaseConfig';
   import { useRouter } from 'vue-router';
   import Alert from '../components/Alert.vue';
   
+  const {t} = useI18n();
  // User data
  const accountType = ref('');
 const firstname = ref('');

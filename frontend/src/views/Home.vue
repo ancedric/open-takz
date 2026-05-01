@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import supabase from '../services/supabaseConfig.js';
 import defaultNews from '../assets/images/news.jpg';
 import companyImg from '../assets/images/company.png';
 import { useUserStore } from '../store/index.js';
 import AppIcon from '../components/AppIcon.vue';
 
+const {t} = useI18n()
 const userStore = useUserStore();
 const jobs = ref([]);
 const filterSearch = ref('');
@@ -128,7 +130,7 @@ const fetchJobs = async (isFirstLoad = true) => {
     const { data, error } = await supabase
         .from('jobs')
         .select('*, company:companyref (*)')
-        .gt('deadline', new Date().toISOString())
+        //.gt('deadline', new Date().toISOString())
         .order('created_at', { ascending: false })
         .range(start, end); // pagination ici
 
@@ -357,15 +359,15 @@ onUnmounted(() => {
     </transition>
   <div class="job-board">
     <header class="board-header">
-      <h1>Annonces </h1>
-      <p>Rejoignez nos équipes et participez à nos prochains événements.</p>
+      <h1>{{t('home.news')}} </h1>
+      <p>{{t('home.join')}}</p>
       
       <div class="filters">
-        <input type="text" v-model="filterSearch" placeholder="Rechercher un poste...">
+        <input type="text" v-model="filterSearch" :placeholder="t('home.search-post')">
         <select v-model="filterType">
-          <option value="all">Tous les types</option>
-          <option value="recrutement">Recrutement</option>
-          <option value="evenement">Événements</option>
+          <option value="all">{{t('home.all-types')}}</option>
+          <option value="recrutement">{{t('home.recruitments')}}</option>
+          <option value="evenement">{{t('home.events')}}</option>
         </select>
       </div>
     </header>
@@ -380,7 +382,7 @@ onUnmounted(() => {
                     <span class="company-name-link" @click="viewCompanyProfile(job.company)">
                         {{ job.company?.companyname }}
                     </span>
-                    <span class="post-date">Il y a 2 jours • <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
+                    <span class="post-date">{{ job.created_at.split('T')[0] }} • <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
                     <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
                     <circle cx="12" cy="10" r="3"></circle>
                 </svg> {{ job.location }}</span>
@@ -403,14 +405,14 @@ onUnmounted(() => {
                         <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path>
                         <path d="M9 12H4s.5-1 1-4c2 1 3 2 4 4z"></path>
                     </svg>
-                    {{ job.type === 'recrutement' ? 'Postuler' : 'Réserver' }}
+                    {{ job.type === 'recrutement' ? t('home.apply') : t('home.book') }}
                 </button>
                 
                 <button @click="toggleSaveJob(job)" class="save-btn" :class="{ 'is-saved': isJobSaved(job.jobref) }">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
                     </svg>
-                    {{ isJobSaved(job.jobref) ? 'Enregistré' : 'Enregistrer' }}
+                    {{ isJobSaved(job.jobref) ? t('home.registered') : t('home.register') }}
                 </button>
             </div>
 
@@ -423,16 +425,16 @@ onUnmounted(() => {
             </span>
         </div>
         <div v-if="isLoadingMore" class="loading-trigger">
-            <span class="spinner"></span> Chargement des opportunités...
+            <span class="spinner"></span> {{t('home.loading-opportunities')}}
         </div>
         <div v-if="!hasMore && jobs.length > 0" class="loading-trigger">
-                ✨ Vous avez vu toutes les offres récentes.
+                ✨ {{t('home.seen-recent-opportunities')}}
         </div>
     </main>
 
     <aside class="sidebar">
         <div class="sidebar-widget profile-widget">
-            <div class="widget-header">Ma Carrière</div>
+            <div class="widget-header">{{t('home.my-career')}}</div>
             <div class="profile-stats-grid">
                 <div class="stat-item">
                     <div class="icon-box blue">
@@ -440,7 +442,7 @@ onUnmounted(() => {
                     </div>
                     <div class="stat-info">
                         <strong>{{ userStats.appliedCount }}</strong>
-                        <span>Postulés</span>
+                        <span>{{t('home.applied')}}</span>
                     </div>
                 </div>
                 
@@ -450,14 +452,14 @@ onUnmounted(() => {
                     </div>
                     <div class="stat-info">
                         <strong>{{ userStats.interviewsCount }}</strong>
-                        <span>Réponses</span>
+                        <span>{{t('home.responses')}}</span>
                     </div>
                 </div>
             </div>
         </div>
 
             <div class="sidebar-widget saved-jobs-widget">
-                <div class="widget-header">À ne pas manquer</div>
+                <div class="widget-header">{{t('home.not-to-miss')}}</div>
                 <div class="saved-list">
                     <div v-for="event in jobs.filter(j => j.type === 'evenement').slice(0,2)" :key="event.jobref" @click="openJobDetails(event)" class="saved-card-mini">
                         <img :src="event.company?.logo_url || companyImg" class="mini-logo">
@@ -474,7 +476,7 @@ onUnmounted(() => {
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
                         <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
                     </svg>
-                    Mes Favoris
+                    {{t('home.my-favourites')}}
                 </div>
                 
                 <div class="saved-list">
@@ -483,13 +485,13 @@ onUnmounted(() => {
                         <div class="mini-details">
                             <p class="mini-title">{{ saved.jobs?.title }}</p>
                             <p class="mini-company">{{ saved.jobs?.company?.companyname }}</p>
-                            <span v-if="hasApplied(saved.jobref)" class="mini-status-tag">Envoyé</span>
+                            <span v-if="hasApplied(saved.jobref)" class="mini-status-tag">{{t('home.sent')}}</span>
                         </div>
                         <button @click="toggleSaveJob(saved.jobs)" class="remove-favorite">✕</button>
                     </div>
                     
                     <div v-if="savedJobsList.length === 0" class="empty-favorites">
-                        <p>Aucune annonce enregistrée.</p>
+                        <p>{{t('home.no-anouncement-registered')}}</p>
                     </div>
                 </div>
             </div>
@@ -509,43 +511,43 @@ onUnmounted(() => {
                     <img :src="selectedCompany?.logo_url || companyImg" class="modal-logo">
                     <div class="header-titles">
                         <h3>{{ selectedCompany?.companyname }}</h3>
-                        <span class="location-tag">📍 {{ selectedCompany?.country || 'Pays non défini' }}</span>
+                        <span class="location-tag">📍 {{ selectedCompany?.country || t('home.undefined-country') }}</span>
                     </div>
                 </div>
 
                 <div class="company-section">
-                    <h4>À propos</h4>
-                    <p class="company-bio">{{ selectedCompany?.about || 'Aucune description disponible.' }}</p>
+                    <h4>{{t('home.about')}}</h4>
+                    <p class="company-bio">{{ selectedCompany?.about || t('home.no-description-provided') }}</p>
                 </div>
 
                 <div class="company-info-grid">
                     <div class="info-item">
-                        <label>Secteur d'activité</label>
-                        <span>{{ selectedCompany?.activity || 'Non défini' }}</span>
+                        <label>{{t('home.activity-sector')}}</label>
+                        <span>{{ selectedCompany?.activity || t('home.undefined') }}</span>
                     </div>
                     <div class="info-item">
-                        <label>E-mail officiel</label>
-                        <span>{{ selectedCompany?.email || 'Non défini' }}</span>
+                        <label>{{t('home.official-email')}}</label>
+                        <span>{{ selectedCompany?.email || t('home.undefined') }}</span>
                     </div>
                     <div class="info-item">
-                        <label>Contact</label>
-                        <span>{{ selectedCompany?.phone || 'Non défini' }}</span>
+                        <label>{{t('home.contact')}}</label>
+                        <span>{{ selectedCompany?.phone || t('home.undefined') }}</span>
                     </div>
                     <div class="info-item">
-                        <label>Siège social</label>
-                        <span>{{ selectedCompany?.address || 'Non définie' }}</span>
+                        <label>{{t('home.headquarters')}}</label>
+                        <span>{{ selectedCompany?.address || t('home.undefined') }}</span>
                     </div>
                     <div class="info-item">
-                        <label>Forme Juridique</label>
-                        <span>{{ selectedCompany?.legal_form || 'Non défini' }}</span>
+                        <label>{{t('home.legal-form')}}</label>
+                        <span>{{ selectedCompany?.legal_form || t('home.undefined')}}</span>
                     </div>
                     <div class="info-item">
-                        <label>N° Registre</label>
-                        <span>{{ selectedCompany?.register_number || 'Non défini' }}</span>
+                        <label>{{t('home.register-number')}}</label>
+                        <span>{{ selectedCompany?.register_number || t('home.undefined') }}</span>
                     </div>
                     <div class="info-item">
-                        <label>Création</label>
-                        <span>{{ selectedCompany?.createdat.split('T')[0].toLocaleString() || 'Non définie' }}</span>
+                        <label>{{t('home.creation-date')}}</label>
+                        <span>{{ selectedCompany?.createdat.split('T')[0].toLocaleString() || t('home.undefined') }}</span>
                     </div>
                 </div>
             </div>
@@ -556,24 +558,24 @@ onUnmounted(() => {
 
             <div class="apply-modal">
 
-                <h3>Postuler pour : {{ selectedJob.title }}</h3>
+                <h3>{{t('home.apply-for')}} {{ selectedJob.title }}</h3>
 
                 <form @submit.prevent="submitApplication">
 
                     <div class="form-row">
 
-                        <input type="text" v-model="formApp.firstname" placeholder="Prénom" required>
+                        <input type="text" v-model="formApp.firstname" placeholder="{{t('signup.first-name')}}" required>
 
-                        <input type="text" v-model="formApp.lastname" placeholder="Nom" required>
+                        <input type="text" v-model="formApp.lastname" placeholder="{{t('signup.last-name')}}" required>
 
                     </div>
 
-                    <input type="email" v-model="formApp.email" placeholder="Votre Email" required>
+                    <input type="email" v-model="formApp.email" placeholder="{{t('home.your-email')}}" required>
 
 
                     <div class="file-upload" v-show="selectedJob.type === 'recrutement'">
 
-                        <label>Télécharger votre CV (PDF)</label>
+                        <label>{{t('home.upload-your-cv')}}</label>
 
                         <input type="file" @change="handleFileUpload" accept=".pdf" :required="selectedJob.type === 'recrutement'">
 
@@ -585,11 +587,11 @@ onUnmounted(() => {
 
                         <button type="submit" class="confirm-btn" :disabled="isUploading">
 
-                        {{ isUploading ? 'Envoi en cours...' : !isUploading && selectedJob.type === 'recrutement' ? 'Envoyer ma candidature' : 'Envoyer ma réservation' }}
+                        {{ isUploading ? t('home.sending') : !isUploading && selectedJob.type === 'recrutement' ? t('home.send-application') : t('home.send-reservation') }}
 
                         </button>
 
-                        <button type="button" @click="selectedJob = null" class="close-btn">Annuler</button>
+                        <button type="button" @click="selectedJob = null" class="close-btn">{{t('home.cancel')}}</button>
 
                     </div>
 
@@ -611,11 +613,11 @@ onUnmounted(() => {
                 <div class="details-body">
                     <div class="details-tags">
                         <span class="tag">{{ jobDetails?.type }}</span>
-                        <span class="tag"><app-icon name="CALENDAR" size="20" /> Expire le : {{ jobDetails?.deadline }}</span>
+                        <span class="tag"><app-icon name="CALENDAR" size="20" /> {{t('home.expire-at')}} {{ jobDetails?.deadline }}</span>
                     </div>
                     
                     <div class="details-content">
-                        <h4>Description {{jobDetails.type=== 'evenement' ? 'de l\'événement' : 'du poste'}}</h4>
+                        <h4>{{t('home.description')}} {{jobDetails.type=== 'evenement' ? t('home.of-the-event' ): t('home.of-the-position')}}</h4>
                         <p v-html="jobDetails?.description.replace(/\n/g, '<br>')"></p>
                     </div>
                 </div>
@@ -624,7 +626,7 @@ onUnmounted(() => {
                 </div>
                 <div class="details-footer">
                     <button class="apply-btn-social" @click="openApplyModal(jobDetails); showDetailsModal = false">
-                        Postuler à nouveau
+                        {{t('home.apply-again')}}
                     </button>
                 </div>
             </div>

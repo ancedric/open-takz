@@ -6,14 +6,12 @@ import { useUserStore } from './store/index'
 // Vos imports originaux
 import LandingPage from './views/LandingPage.vue'
 import Project from './views/Project.vue'
+import Docs from './views/Docs.vue'
 import AddTask from './components/AddTask.vue'
-import EditTask from './views/EditTask.vue'
 import Profile from './views/Profile.vue'
 import Login from './views/Login.vue'
 import Register from './views/Register.vue'
 import EmployePortal from './views/EmployeePortal.vue'
-import EditProfile from './views/EditProfile.vue'
-import SetProfile from './views/SetProfile.vue'
 import Pricing from './views/Pricing.vue'
 import UsersConditions from './views/UserSConditions.vue'
 import PrivacyPolicy from './views/PrivacyPolicy.vue'
@@ -33,6 +31,8 @@ import Home from './views/Home.vue'
 import SuperAdmin from './views/SuperAdmin.vue'
 import ErrorPage from './views/ErrorPage.vue'
 import SubscriptionExpired from './views/SubscriptionExpired.vue'
+import Presentation from './Modules/presentation/home.vue'
+import PresentationEditor from './Modules/presentation/Editor.vue'
 
 const departments = ref([])
 
@@ -42,9 +42,26 @@ onMounted(async () => {
     departments.value = depts || []
 })
 
+const presentationGuard = (to, from, next) => {
+  const userStore = useUserStore();
+  const user = userStore.user;
+
+  if (!user) return next('/login');
+
+  const isModuleActive = user.company.active_modules?.includes('presentation');
+  const hasPrivilege = ['owner', 'admin', 'hr'].includes(user.employe.privilege);
+
+  if (isModuleActive && hasPrivilege) {
+    next();
+  } else {
+    next('/home');
+  }
+};
+
 const routes = [
   // ROUTES PUBLIQUES (Hors structure ERP)
   { path: '/', component: LandingPage },
+  { path: '/docs', component: Docs },
   { path: '/auth', component: Login },
   { path: '/register', component: Register },
   { path: '/pricing', component: Pricing },
@@ -146,6 +163,14 @@ const routes = [
           }
         }
       },
+      { 
+        path: 'presentation', 
+        component: Presentation,
+        beforeEnter: presentationGuard
+      },
+      { path: 'presentation/edit/:id', component: PresentationEditor,
+        beforeEnter: presentationGuard,
+      },
       { path: 'employe', component: EmployePortal }
     ]
   },
@@ -190,10 +215,24 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  if (to.path === '/auth') return next();
+  router.beforeEach(async (to, from, next) => {
+  const userStore = useUserStore();
+  
+  // Si on rafraîchit la page, isLoading est true par défaut
+  // On attend que l'initialisation soit terminée
+  if (userStore.isLoading) {
+    await userStore.init();
+  }
 
-  // 2. On vérifie si l'utilisateur est connecté
-  //if (!userStore.user) return next('/auth');
+  // Vérification de l'accès aux pages protégées
+  if (to.meta.requiresAuth && !userStore.isAuthenticated) {
+    next('/login');
+  } else {
+    next();
+  }
+});
+
+  if (to.path === '/auth') return next();
 
   // 3. LOGIQUE D'ABONNEMENT
   if(userStore.user && userStore.user.company){

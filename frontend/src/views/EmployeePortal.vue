@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import supabase from '../services/supabaseConfig';
+import QrcodeVue from 'qrcode.vue';
 import { useUserStore } from '../store/index';
 import { downloadContract, downloadPaySlip } from '../services/pdfGenerator'; 
 import AppIcon from '../components/AppIcon.vue';
@@ -24,6 +25,28 @@ const leaveRequest = ref({
   endDate: '',
   reason: ''
 });
+const attendanceSubscription = ref(null);
+
+// Fonction pour écouter les changements de présence en temps réel
+const subscribeToAttendance = () => {
+  const empId = userStore.user.employe.id;
+
+  attendanceSubscription.value = supabase
+    .channel('public:attendance')
+    .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'attendance', 
+        filter: `employee_id=eq.${empId}` 
+      }, 
+      (payload) => {
+        console.log('Changement détecté:', payload);
+        // Si c'est une nouvelle insertion ou une mise à jour (départ)
+        attendanceRecord.value = payload.new;
+      }
+    )
+    .subscribe();
+};
 
 setInterval(() => {
   currentTime.value = new Date().toLocaleTimeString();
@@ -194,6 +217,13 @@ const handlePunch = async () => {
 onMounted(() => {
     fetchMyData();
     checkTodayAttendance();
+    subscribeToAttendance();
+});
+
+onUnmounted(() => {
+    if (attendanceSubscription.value) {
+        supabase.removeChannel(attendanceSubscription.value);
+    }
 });
 </script>
 
@@ -231,17 +261,39 @@ onMounted(() => {
     <div class="portal-layout">
       <div class="left-col">
         <section class="attendance-card card">
-            <div class="clock-display">
-                <span class="live-time">{{ currentTime }}</span>
-                <p>{{ new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) }}</p>
+    <div class="clock-display">
+        <span class="live-time">{{ currentTime }}</span>
+        <p>{{ new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) }}</p>
+    </div>
+
+    <div class="punch-actions">
+        <div v-if="!attendanceRecord" class="qr-container">
+            <qrcode-vue 
+                :value="userStore.user.company.companyref" 
+                :size="180" 
+                level="H" 
+                render-as="svg"
+                class="qr-code"
+            />
+            <p class="qr-hint">Scannez ce code pour pointer votre arrivée</p>
+        </div>
+
+        <button v-else-if="!attendanceRecord.check_out" @click="handlePunch" class="btn-punch out">
+            <AppIcon name="LOCK" size="20" /> Enregistrer mon Départ
+        </button>
+
+        <div v-else class="day-completed">
+            <div class="success-icon">
+                <AppIcon name="CHECK" size="40" />
             </div>
-            <div class="punch-actions">
-                <button v-if="!attendanceRecord" @click="handlePunch" class="btn-punch in"> <AppIcon name="MAP_PIN" size="20" /> Arrivée</button>
-                <button v-else-if="!attendanceRecord.check_out" @click="handlePunch" class="btn-punch out"> <AppIcon name="LOCK" size="20" /> Départ</button>
-                <div v-else class="day-completed"> <AppIcon name="CHECK" size="20" /> Journée terminée</div>
-                <div class="btn-punch" @click="requestLeaveOpen = !requestLeaveOpen"> <AppIcon name="CHECK" size="20" /> Demander un congé</div>
-            </div>
-        </section>
+            <p>Journée terminée. À demain !</p>
+        </div>
+
+        <div class="btn-leave-request" @click="requestLeaveOpen = !requestLeaveOpen">
+            <AppIcon name="CALENDAR" size="20" /> Demander un congé
+        </div>
+    </div>
+</section>
 
         <section class="projects-section card">
           <h3><AppIcon name="PROJECTS" size="20" /> Mes Projets en cours</h3>
@@ -464,4 +516,54 @@ onMounted(() => {
 .status-dot.actif { background: #10b981; }
 .status-dot.en_pause { background: #f59e0b; }
 .status-dot.termine { background: #64748b; }
+.qr-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 2px dashed #cbd5e1;
+    margin-bottom: 1rem;
+}
+
+.qr-code {
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.qr-hint {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 500;
+    text-align: center;
+}
+
+.day-completed {
+    text-align: center;
+    padding: 1.5rem;
+    color: #10b981;
+    font-weight: bold;
+}
+
+.success-icon {
+    margin-bottom: 10px;
+    color: #10b981;
+}
+
+.btn-leave-request {
+    margin-top: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    color: #2a2f4f;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: underline;
+}
 </style>

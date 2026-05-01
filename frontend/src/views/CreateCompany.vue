@@ -3,6 +3,9 @@ import { ref } from 'vue';
 import supabase from '../services/supabaseConfig';
 import { useUserStore } from '../store/index';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+
+const {t} = useI18n();
 
 const userStore = useUserStore();
 const router = useRouter();
@@ -48,6 +51,9 @@ const handleCreate = async () => {
     }
 
     // 2. Création de l'entreprise
+    //On ajoute 1 mois d'essaie gratuit
+    const today = new Date();
+    const trialEndDate = new Date(today.setMonth(today.getMonth() + 1)).toISOString();
     const { error: compError } = await supabase
       .from('company')
       .insert([{ 
@@ -62,7 +68,8 @@ const handleCreate = async () => {
         phone: companyPhone.value,
         owner_ref: userref,
         about: companyAbout.value,
-        activity: companyActivity.value 
+        activity: companyActivity.value,
+        expiry_date : trialEndDate
       }]);
 
     if (compError) throw compError;
@@ -99,19 +106,19 @@ const handleCreate = async () => {
 <template>
   <div class="page setup-ctn">
     <div class="auth-ctn">
-      <h3>Enregistrez votre entreprise</h3>
+      <h3>{{ t('create_company') }}</h3>  
       <div class="input-ctn">
-        <div class="label">Nom de l'entreprise</div>
-        <input v-model="companyName" class="set-input" required placeholder="Nom officiel">
+        <div class="label">{{ t('company_name') }}</div>
+        <input v-model="companyName" class="set-input" required placeholder="{{ t('company_name') }}">
       </div>
       <div class="input-ctn">
-        <div class="label">Logo</div>
+        <div class="label">{{ t('logo') }}</div>
         <input type="file" @change="onFileChange" class="set-input">
       </div>
       <div class="input-ctn">
-        <div class="label">Forme juridique</div>
+        <div class="label">{{ t('legal_form') }}</div>
         <select class="set-input" required v-model="legalForm">
-          <option value="" disabled selected>>Choisissez une option</option>
+          <option value="" disabled selected>{{ t('select_legal_form') }}</option>
           <option value="ETS">ETS/EI</option>
           <option value="SA">SA</option>
           <option value="SARL">SARL</option>
@@ -125,13 +132,13 @@ const handleCreate = async () => {
         </select>
       </div>
       <div class="input-ctn">
-        <div class="label">A propos</div>
-        <textarea v-model="companyAbout" class="set-input" placeholder="Décrivez votre entreprise"></textarea>
+        <div class="label">{{ t('company_about') }}</div>
+        <textarea v-model="companyAbout" class="set-input" placeholder="{{ t('company_about') }}"></textarea>
       </div>
       <div class="input-ctn">
-        <div class="label">Secteur 'activité'</div>
+        <div class="label">{{ t('company_activity') }}</div>
         <select class="set-input" required v-model="companyActivity">
-          <option value="" disabled selected>>Choisissez une option</option>
+          <option value="" disabled selected>{{ t('select_company_activity') }}</option>
             <option value="Aéronautique & spatial">Aéronautique & spatial</option>
             <option value="Agroalimentaire">Agroalimentaire</option>
             <option value="Assurances">Assurances</option>
@@ -165,9 +172,9 @@ const handleCreate = async () => {
           </select>
         </div>
         <div class="input-ctn">
-          <div class="label">Country</div>
+          <div class="label">{{ t('country') }}</div>
           <select class="set-input" required v-model="companyCountry">
-            <option value="" disabled selected>>Choisissez un pays</option>
+            <option value="" disabled selected>{{ t('select_country') }}</option>
             <option value="Algeria">Algeria</option>
             <option value="Angola">Angola</option>
             <option value="Argentina">Argentina</option>
@@ -237,23 +244,23 @@ const handleCreate = async () => {
           </select>
         </div>
       <div class="input-ctn">
-        <div class="label">Siège social</div>
-        <input type="text" v-model="companyAddress" class="set-input" required placeholder="Adresse officielle">
+        <div class="label">{{ t('company_address') }}</div>
+        <input type="text" v-model="companyAddress" class="set-input" required placeholder="{{ t('company_address') }}">
       </div>
       <div class="input-ctn">
-        <div class="label">Numéro du régistre</div>
-        <input type="text" v-model="registerdNumber" class="set-input" required placeholder="Numéro du Régistre de Commerce">
+        <div class="label">{{ t('registered_number') }}</div>
+        <input type="text" v-model="registerdNumber" class="set-input" required placeholder="{{ t('registered_number') }}">
       </div>
       <div class="input-ctn">
-        <div class="label">Téléphone de l'entreprise</div>
-        <input type="phone" v-model="companyPhone" class="set-input" required placeholder="Numéro de téléphone officiel">
+        <div class="label">{{ t('company_phone') }}</div>
+        <input type="phone" v-model="companyPhone" class="set-input" required placeholder="{{ t('company_phone') }}">
       </div>
       <div class="input-ctn">
-        <div class="label">Adresse email de l'entreprise</div>
-        <input type="email" v-model="companyEmail" class="set-input" required placeholder="Adresse email officielle">
+        <div class="label">{{ t('company_email') }}</div>
+        <input type="email" v-model="companyEmail" class="set-input" required placeholder="{{ t('company_email') }}">
       </div>
       <button @click="handleCreate" class="auth-btn" :disabled="loading">
-        {{ loading ? 'Création...' : 'Créer mon espace' }}
+        {{ loading ? `${t('creating_company')}` : `${t('submit')}` }}
       </button>
     </div>
   </div>

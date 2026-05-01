@@ -3,13 +3,14 @@ import { useUserStore } from '../store/index'
 import supabase from '../services/supabaseConfig.js'
 import { useRouter } from 'vue-router';
 import { ref, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n'
 import Header from '../components/Header.vue'
 import Chat from '../components/Chat.vue'
 import FeedbackModal from '../components/FeedBack.vue';
 import AIAssistant from '../components/AIAssistant.vue';
 
 const feedbackRef = ref(null);
-
+const {t} = useI18n()
 const openFeedback = () => {
   feedbackRef.value.open();
 };
@@ -74,51 +75,51 @@ const logout = () => {
       
       <nav class="sidebar-nav">
         <div class="nav-section">
-          <router-link :to="`/home/create-company/${userStore.user.employe.userref}`" class="nav-item">Créer une entreprise</router-link>
+          <router-link :to="`/home/create-company/${userStore.user.employe.userref}`" class="nav-item">{{t('layout.create-company')}}</router-link>
           <button @click="openFeedback" class="nav-item logout-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z"></path></svg>
-            Laisser un avis
+            {{t('layout.leave-advice')}}
           </button>
     
-          <p class="section-title">Général</p>
+          <p class="section-title">{{t('layout.general')}}</p>
           
           <router-link to="/home" class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-            Actualités
+            {{t('layout.news')}}
           </router-link>
 
           <router-link to="/home/dashboard" class="nav-item" v-if="userStore.user.employe.privilege ==='owner'">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="11" width="7" height="9"></rect><rect x="3" y="15" width="7" height="6"></rect></svg>
-            Tableau de Bord
+            {{t('layout.dashboard')}}
           </router-link>
 
           <router-link to="/home/employe" class="nav-item" v-if="userStore.user.employe.companyref">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-            Portail employé
+            {{t('layout.employee-portal')}}
           </router-link>
         </div>
 
         <div class="nav-section">
-          <p class="section-title">Départements</p>
+          <p class="section-title">{{t('layout.departments')}}</p>
           
           <router-link to="/home/hr" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner'">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-            Ressources Humaines
+            {{t('layout.hr')}}
           </router-link>
 
           <router-link to="/home/accounting" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner' || userStore.user.employe.privilege ==='admin'">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-            Comptabilité
+            {{t('layout.accounting')}}
           </router-link>
 
           <router-link to="/home/crm" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner' || userStore.user.employe.privilege ==='admin'">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-            Marketing
+            {{t('layout.crm')}}
           </router-link>
 
           <router-link to="/home/finance" class="nav-item" v-if="userStore.user.employe.privilege ==='hr' || userStore.user.employe.privilege ==='owner' || userStore.user.employe.privilege ==='admin'">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
-            Finance & Facturation
+            {{t('layout.finance')}}
           </router-link>
 
           <router-link v-for="d in dynamicDepartments" :key="d.deptref" :to="`/home/department/${d.deptname}/${d.deptref}`" class="nav-item"> 
@@ -128,16 +129,16 @@ const logout = () => {
         </div>
 
         <div class="nav-section settings">
-          <p class="section-title">Compte</p>
+          <p class="section-title">{{t('layout.account')}}</p>
           
           <router-link to="/home/profile" class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-            Mon Profil
+            {{t('layout.profile')}}
           </router-link>
           
           <button @click="logout" class="nav-item logout-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-            Déconnexion
+            {{t('layout.logout')}}
           </button>
         </div>
       </nav>

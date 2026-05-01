@@ -6,13 +6,14 @@ import json
 from analyzer import generate_insights 
 from pydantic import BaseModel
 from groq import Groq
+from google import genai
 import os
 
 app = FastAPI()
 
 origins = [
     "localhost:5173",
-    "https://corevia-ai-backend.onrender.com"
+    "https://getcorevia.net"
 ]
 
 # TRÈS IMPORTANT : Autoriser Vue.js à parler à Python (CORS)
@@ -24,8 +25,8 @@ app.add_middleware(
 )
 
 # Remplace par ta clé ou utilise os.environ.get("GROQ_API_KEY")
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-
+#client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+client = genai()
 @app.get("/ai/suggestions")
 async def get_ai_suggestions(entreprise_ref: str, user_ref: str):
     """

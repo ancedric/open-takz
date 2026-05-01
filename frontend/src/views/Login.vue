@@ -1,27 +1,27 @@
 <template>
   <div class="page">
     <div class="auth-ctn">
-      <h2>Sign In</h2>
+      <h2>{{ t('login.sign-in') }}</h2>
       <form @submit.prevent="handleSubmit">
         <div class="input-ctn">
-          <div class="label">Email address</div>
-          <input type="email" class="set-input" v-model="userEmail" placeholder="Email">
+          <div class="label">{{ t('login.email') }}</div>
+          <input type="email" class="set-input" v-model="userEmail" :placeholder="t('login.email')">
         </div>
         <div class="input-ctn">
-          <div class="label">Password</div>
+          <div class="label">{{ t('login.password') }}</div>
           <input 
             :type="showPassword ? 'text' : 'password'" 
             class="set-input" 
             v-model="userPassword" 
-            placeholder="Password"
+            :placeholder="t('login.password')"
           >
         </div>
         <div @click="showPassword = !showPassword" class="hideOrShow">
-            {{ showPassword ? 'Hide password' : 'Show password' }}
+            {{ showPassword ? t('login.hide-password') : t('login.show-password') }}
         </div>
-        <button type="submit" class="auth-btn">{{ submitting ? 'Please wait...' : 'Sign In' }}</button>
-        <p class="switch">Don't have an account ? <router-link to="/register">Sign Up</router-link></p>
-        <p class="switch">En entrant dans l'application vous acceptez nos <router-link to="/users-conditions">conditions d'utilisation</router-link></p>
+        <button type="submit" class="auth-btn">{{ submitting ? t('login.please-wait') : t('login.sign-in') }}</button>
+        <p class="switch">{{ t('login.dont-have-account') }} <router-link to="/register">{{ t('login.sign-up') }}</router-link></p>
+        <p class="switch">{{ t('login.accept-terms') }} <router-link to="/users-conditions">{{ t('login.terms-of-use') }}</router-link></p>
       </form>
     </div>
   </div>
@@ -32,11 +32,13 @@
   
 <script setup>
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../store/index';
 import supabase from '../services/supabaseConfig'; // Utilisation du client Supabase
 import Alert from '../components/Alert.vue';
 
+const {t} = useI18n();
 const userEmail = ref('');
 const userPassword = ref('');
 const router = useRouter();
