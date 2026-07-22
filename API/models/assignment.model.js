@@ -1,7 +1,6 @@
 import db from '../services/db.js';
 
 export const createAssignment = async (assRef, collabRef, taskRef, userRef) => {
-  console.log("DEBUG MODEL: Données reçues: ", assRef, collabRef, taskRef, userRef)
   const sql = `
     INSERT INTO assignments (assRef, collabRef, taskRef, userref, dateAssigned) 
     VALUES ($1, $2, $3, $4, NOW())
@@ -15,6 +14,12 @@ export const createAssignment = async (assRef, collabRef, taskRef, userRef) => {
 export const getAssignmentsByTask = async (taskRef) => {
   const sql = `SELECT * FROM assignments WHERE taskRef = $1`;
   const result = await db.query(sql, [taskRef]);
+  return result.rows;
+};
+
+export const fetchserAssighnments = async (userRef) => {
+  const sql = `SELECT * FROM assignments WHERE userref = $1`;
+  const result = await db.query(sql, [userRef]);
   return result.rows;
 };
 

@@ -63,6 +63,32 @@ export const getAssignmentsByTaskController = async (req, res) => {
   }
 };
 
+export const getUserAssignments = async (req, res) => {
+  const { userref } = req.params;
+
+  try {
+    const results = await fetchUserAssignments(taskRef);
+
+    if (results.length === 0) {
+      return res.status(200).json({
+        success: false,
+        message: 'Aucune assignation trouvée.',
+        data: []
+      });
+    }
+
+    res.status(200).json({
+      succes: true,
+      message: 'Assignations récupérées avec succès.',
+      data: results
+    });
+
+  } catch (error) {
+    console.error('Erreur récupération des assignations:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+};
+
 // ✅ Supprimer une assignation
 export const deleteAssignmentController = async (req, res) => {
   const { assRef } = req.params;

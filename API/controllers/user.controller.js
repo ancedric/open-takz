@@ -7,11 +7,13 @@ import jwt from 'jsonwebtoken';
 import {
   findUserByEmail,
   findUserByRef,
+  findUserPhone,
   createUser,
   updateUserPassword,
   updateUserProfile,
   getAllUsers
 } from '../models/user.model.js';
+import { createEmploye } from './employe.controller.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,16 +59,16 @@ export const loginUser = async (req, res) => {
     const user = await findUserByEmail(email);
 
     if (!user) {
-      return res.status(401).json({ message: 'Identifiants incorrects' });
+      return res.status(401).json({ error: 'Erreur d\'authentification', message: 'Identifiants incorrects' });
     }
 
     if (!user.password) {
-      return res.status(500).json({ message: 'Erreur de configuration du compte' });
+      return res.status(500).json({ error: 'Erreur d\'authentification',message: 'Erreur de configuration du compte' });
     }
 
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
-      return res.status(401).json({ message: 'Identifiants incorrects' });
+      return res.status(401).json({ error: 'Erreur d\'authentification', message: 'Identifiants incorrects' });
     }
 
     const { password: _, ...userData } = user;
@@ -78,16 +80,16 @@ export const loginUser = async (req, res) => {
       { expiresIn: '1d' }
     );
 
-    res.json({ message: 'Connecté', token, user: userData });
+    res.status(200).json({success: true, message: 'Connecté', token, user: userData });
 
   } catch (error) {
     console.error('Erreur login:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
+res.status(500).json({ error: 'Erreur serveur', message: 'Erreur de connexion avec le serveur'});
   }
 };
 
 export const signupUser = async (req, res) => {
-  const { firstname, lastname, email, password, country, city, privilege } = req.body;
+  const { firstname, lastname, email, password, country, city } = req.body;
   const now = new Date();
   let profilePhotoUrl = null;
 
@@ -96,7 +98,8 @@ export const signupUser = async (req, res) => {
   }
 
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(password, salt);
     const date = new Date();
     const userRef = `USER_${date.getTime()}`;
 
@@ -109,34 +112,46 @@ export const signupUser = async (req, res) => {
       country,
       city,
       profilePhotoUrl,
-      privilege: privilege || 'user'
+      privilege: 'user'
     });
 
-    // INotification de Bienvenue
-    const mailOptions = {
-      from: process.env.BREVO_SMTP_USER,
-      to: email,
-      subject: 'Bienvenue sur Open Task !',
-      text: `Bonjour ${firstname},\n\nBienvenue sur Open Task ! Nous sommes ravis de vous compter parmi nous.\n\nCordialement,\nL'équipe Open Task`
-    };
+    if(user){
+      const empRef = 'EMP-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+      
+      const employe = await createEmploye({
+        empref: empRef,
+        userref: userRef,
+        position: 'NON DEFINIE',
+        privilege: 'EMPLOYE'
+      });
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('Erreur envoi email:', error);
-      } else {
-        console.log('Email envoyé:', info.response);
+      if(employe){
+        // INotification de Bienvenue
+        /*const mailOptions = {
+          from: process.env.BREVO_SMTP_USER,
+          to: email,
+          subject: 'Bienvenue sur Open Task !',
+          text: `Bonjour ${firstname},\n\nBienvenue sur Open Task ! Nous sommes ravis de vous compter parmi nous.\n\nCordialement,\nL'équipe Open Task`
+        };
+
+        /*transporter.sendMail(mailOptions, (error, info) => {
+          if (error) {
+            console.error('Erreur envoi email:', error);
+          } else {
+            console.log('Email envoyé:', info.response);
+          }
+        });*/
+
+        //Notification de Bienvenue
+        /*const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
+        const title = 'Bienvenue sur Open Task';
+        const content = `Bonjour ${firstname}, bienvenue sur Open Task ! Nous sommes ravis de vous compter parmi nous.`;
+        const newNotif = await createNotification(notifRef, title, content, userRef);
+        console.log('Notification créée:', newNotif);*/
+
+        res.status(201).json({ success:true, message: 'Inscription réussie!', data: {user, employe} });
       }
-    });
-
-    //Notification de Bienvenue
-    const notifRef = `NOTIF_${Math.floor(Math.random() * 1000000)}`;
-    const title = 'Bienvenue sur Open Task';
-    const content = `Bonjour ${firstname}, bienvenue sur Open Task ! Nous sommes ravis de vous compter parmi nous.`;
-    const newNotif = await createNotification(notifRef, title, content, userRef);
-    console.log('Notification créée:', newNotif);
-
-    res.status(201).json({ message: 'Utilisateur créé avec succès', data: user });
-
+    }
   } catch (error) {
     // Supprimer fichier uploadé si erreur
     if (req.file) {
@@ -149,11 +164,11 @@ export const signupUser = async (req, res) => {
     }
 
     if (error.code === '23505') {
-      return res.status(400).json({ message: 'Cet email est déjà utilisé' });
+      return res.status(400).json({error: 'Erreur d\'inscription', message: 'Cet email est déjà utilisé' });
     }
 
     console.error('Erreur création utilisateur:', error);
-    res.status(500).json({ message: error.message || 'Erreur serveur' });
+    res.status(500).json({error: 'Erreur serveur', message: error.message || 'Erreur serveur' });
   }
 };
 
@@ -222,12 +237,26 @@ export const getUserByEmail = async (req, res) => {
   try {
     const user = await findUserByEmail(email);
     if (!user) {
-      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
-    res.status(200).json({ message: 'Utilisateur récupéré avec succès', data: user });
+    res.status(200).json({ success: true, message: 'Utilisateur récupéré avec succès', data: user });
   } catch (error) {
     console.error('Erreur récupération utilisateur:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+export const getUserPhone = async (req, res) => {
+  const {userref} = req.params;
+  try {
+    const phone = await findUserPhone(userref);
+    if (!phone) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+    res.status(200).json({ success: true, message: 'Utilisateur récupéré avec succès', data: phone });
+  } catch (error) {
+    console.error('Erreur récupération utilisateur:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 };
 

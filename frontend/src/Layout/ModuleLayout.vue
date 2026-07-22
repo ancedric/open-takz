@@ -1,13 +1,14 @@
 <script setup>
 import { useUserStore } from '../store/index'
-import supabase from '../services/supabaseConfig.js'
 import { useRouter } from 'vue-router';
 import { ref, onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n'
 import Header from '../components/Header.vue'
-import Chat from '../components/Chat.vue'
+import Chat from '../Modules/Chat/Chat.vue'
 import FeedbackModal from '../components/FeedBack.vue';
-import AIAssistant from '../components/AIAssistant.vue';
+import AIAssistant from '../Modules/AI/AIAssistant.vue';
+import { api } from '../services/api.js';
+import Toast from '../components/Toast.vue';
 
 const feedbackRef = ref(null);
 const {t} = useI18n()
@@ -24,12 +25,11 @@ const isSidebarOpen = ref(false);
 onMounted(async () => {
   // Correction de l'accès au companyref selon ton store
   const companyRef = userStore.user.company?.companyref || null;
-  const { data: depts } = await supabase
-    .from('department')
-    .select('*')
-    .eq('companyref', companyRef)
-    
-  departments.value = depts || []
+  const dptResponse = await api.get(`/department/get-departments/${companyRef}`)
+
+  if(dptResponse.data.success === true)
+    departments.value = depts || []
+  else departments.value = []
 })
 
 // 2. Création de la liste filtrée
@@ -63,6 +63,7 @@ const logout = () => {
 </script>
 
 <template>
+  <Toast />
   <div class="erp-container">
     <div v-if="isSidebarOpen" class="sidebar-overlay" @click="toggleSidebar"></div>
 

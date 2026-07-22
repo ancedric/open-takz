@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import supabase from '../services/supabaseConfig.js';
+import { api } from '../services/api.js';
 import defaultNews from '../assets/images/news.jpg';
 import companyImg from '../assets/images/company.png';
 import { useUserStore } from '../store/index.js';
@@ -66,14 +66,13 @@ const fetchMyApplications = async () => {
         const userEmail = userStore.user?.email || userStore.user?.user?.email;
         if (!userEmail) return;
 
-        const { data, error } = await supabase
-            .from('applications')
-            .select('jobref') // On ne récupère que les références pour la comparaison
-            .eq('email', userEmail);
-
-        if (!error) {
-            myApplications.value = data || [];
+        const response = await api.get(`/application/get-applications/${userEmail}`)
+        if (!response.data.success) {
+            myApplications.value = [];
+            const message = response.data.message;
+            triggerToast = (message, type = 'error')
         }
+        myApplications.value = response.data.data;
     } catch (err) {
         console.error("Erreur lors de la récupération des candidatures:", err);
     }
@@ -86,21 +85,11 @@ const fetchUserStats = async () => {
         if (!userEmail) return;
 
         // 1. Compter les candidatures envoyées
-        const { count: applied, error: err1 } = await supabase
-            .from('applications')
-            .select('*', { count: 'exact', head: true })
-            .eq('email', userEmail);
-
-        // 2. Compter les invitations (status 'accepted' ou 'reviewed')
-        const { count: interviews, error: err2 } = await supabase
-            .from('applications')
-            .select('*', { count: 'exact', head: true })
-            .eq('email', userEmail)
-            .in('status', ['accepted', 'reviewed']);
-
-        if (!err1 && !err2) {
-            userStats.value.appliedCount = applied || 0;
-            userStats.value.interviewsCount = interviews || 0;
+        const response = await api.get(`/application/get-stats/${userEmail}`);
+        if(response.data.success){  
+            
+            userStats.value.appliedCount = response.data.data.appliedCount || 0;
+            userStats.value.interviewsCount = response.data.data.interviewsCount || 0;
         }
     } catch (err) {
         console.error("Erreur stats utilisateur:", err);
@@ -127,7 +116,16 @@ const fetchJobs = async (isFirstLoad = true) => {
     const start = currentPage.value * itemsPerPage;
     const end = start + itemsPerPage - 1;
 
-    const { data, error } = await supabase
+    const response = await api.get(`/job/get-jobs?start=${start}&end=${end}`);
+    if(response.data.success) {
+        const data = response.data.data;
+        if (data.length < itemsPerPage) hasMore.value = false;
+        jobs.value = [...jobs.value, ...data];
+        currentPage.value++;
+    } else {
+        triggerToast("Erreur lors de la récupération des annonces", "error");
+    }
+    /*const { data, error } = await supabase
         .from('jobs')
         .select('*, company:companyref (*)')
         //.gt('deadline', new Date().toISOString())
@@ -138,7 +136,7 @@ const fetchJobs = async (isFirstLoad = true) => {
         if (data.length < itemsPerPage) hasMore.value = false;
         jobs.value = [...jobs.value, ...data];
         currentPage.value++;
-    }
+    }*/
     isLoadingMore.value = false;
 };
 
@@ -156,7 +154,14 @@ const fetchSavedJobs = async () => {
     const userRef = userStore.user?.user?.userref; // Vérifie bien ton chemin d'accès au store
     if (!userRef) return;
 
-    const { data, error } = await supabase
+    const response = await api.get(`/application/get-saved-jobs/${userRef}`);
+    if(response.data.success) {
+        savedJobsList.value = response.data.data || [];
+        userStats.value.savedCount = savedJobsList.value.length; // On met à jour le compteur en même temps
+    } else {
+        triggerToast("Erreur lors de la récupération des annonces sauvegardées", "error");
+    }
+    /*const { data, error } = await supabase
         .from('saved_jobs')
         .select(`
             id,
@@ -171,7 +176,7 @@ const fetchSavedJobs = async () => {
     if (!error) {
         savedJobsList.value = data || [];
         userStats.value.savedCount = data.length; // On met à jour le compteur en même temps
-    }
+    }*/
 };
 
 // Filtrage dynamique
@@ -228,9 +233,18 @@ const uploadToStorage = async (file) => {
 const submitApplication = async () => {
     isUploading.value = true;
     try {
-        let fileUrl = null;
+        const resonse = await api.post('/application/submit-application', {
+            userRef: userStore.user?.user?.userref,
+            jobRef: selectedJob.value.jobref,
+            formData: formApp.value,
+            file: selectedFile.value ? await uploadToStorage(selectedFile.value) : null
+        });
+        if(!resonse.data.success) {
+            triggerToast("Erreur lors de l'envoi", "error");
+            throw new Error(resonse.data.message);
+        }
 
-        if (selectedFile.value) {
+        /*if (selectedFile.value) {
             // Afficher un toast de chargement si nécessaire
             triggerToast("Téléchargement de l'image...", "info");
             
@@ -270,7 +284,7 @@ const submitApplication = async () => {
                 jobref: selectedJob.value.jobref 
             });
             await fetchSavedJobs(); 
-        }
+        }*/
         toggleSaveJob(selectedJob.value);
         userStats.value.appliedCount += 1;
         myApplications.value.push({ jobref: selectedJob.value.jobref });
@@ -295,7 +309,14 @@ const toggleSaveJob = async (job) => {
         // Suppression locale immédiate pour la réactivité
         savedJobsList.value.splice(index, 1);
         
-        const { error } = await supabase
+        const response = await api.delete(`/application/remove-saved-job/${userRef}/${job.jobref}`);
+        if(!response.data.success) {
+            fetchSavedJobs(); // Recharger en cas d'échec
+            triggerToast("Erreur lors de la suppression", "error");
+        } else {
+            triggerToast("Retiré des favoris", "info");
+        }
+        /*const { error } = await supabase
             .from('saved_jobs')
             .delete()
             .eq('userref', userRef)
@@ -306,17 +327,18 @@ const toggleSaveJob = async (job) => {
             triggerToast("Erreur lors de la suppression", "error");
         } else {
             triggerToast("Retiré des favoris", "info");
-        }
+        }*/
     } else {
         // Ajout local immédiat (Optimistic UI)
         const newFavorite = { jobref: job.jobref, jobs: job };
         savedJobsList.value.push(newFavorite);
 
-        const { error } = await supabase
-            .from('saved_jobs')
-            .insert({ userref: userRef, jobref: job.jobref });
+        const response = await api.post('/application/save-job', {
+            userRef: userRef,
+            jobRef: job.jobref
+        });
 
-        if (error) {
+        if (!response.data.success) {
             fetchSavedJobs(); // Recharger en cas d'échec
             triggerToast("Erreur lors de l'enregistrement", "error");
         } else {
@@ -491,7 +513,7 @@ onUnmounted(() => {
                     </div>
                     
                     <div v-if="savedJobsList.length === 0" class="empty-favorites">
-                        <p>{{t('home.no-anouncement-registered')}}</p>
+                        <p>{{t('home.no-announcement-registered')}}</p>
                     </div>
                 </div>
             </div>

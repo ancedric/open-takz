@@ -1,0 +1,207 @@
+.cash-ctn{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  border-bottom:2px solid #13032b;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+}
+.cash-ctn .cash-header{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+
+  .cash-ctn .header-left{
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+    }
+    .cash-ctn h3{
+        font-size: 1.5rem;
+        width: 100%;
+        text-align: left;
+        margin: 0;
+      }
+      .cash-ctn input{
+        width: 250px;
+        height: 40px;
+        background-color: transparent;
+        border: 1px solid #13032b;
+        color: #13032b;
+        border-radius: 5px;
+        padding: 10px;
+        font-size: 1.2rem;
+        margin: 10px;
+      }
+      .cash-ctn .search-btn{
+        width: 100px;
+        height: 40px;
+        background-color: #13032b;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all .3s ease-in-out;
+      }
+      .cash-ctn .search-btn:hover{
+          background-color: #7446a1;
+        }
+    .cash-ctn .header-right{
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-right: 100px;
+    }
+    .cash-ctn p{
+        font-size:1.5rem;
+        font-weight: bold;
+      }
+
+      .cash-ctn .reset-btn, .confirm-btn{
+        width: 100px;
+        height: 40px;
+        background-color: #13032b;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all .3s ease-in-out;
+      }
+      .cash-ctn .reset-btn:hover, .confirm-btn:hover{
+          background-color: #7446a1;
+        }
+  
+  .cash-ctn .cash-data{
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+    border-top: 1px solid #13032b;
+  }
+  .cash-ctn .product-result{
+      width: 40%;
+      height: 60vh;
+      overflow-y: scroll;
+      overflow-x: hidden;
+      padding-bottom: 80px;
+
+      scrollbar-width: none;
+    }
+    .cash-ctn .cash-cart{
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      width: 60%;
+      height: 60vh;
+      overflow: hidden;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-left: 1px solid #13032b;
+    } 
+    .cash-ctn .cart-amount{
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #13032b;
+      }
+.cash-ctn .product-result::-webkit-scrollbar{
+  display: none;
+  width: 0;
+}
+
+/* --- RESPONSIVE CASH (Point de Vente) --- */
+@media (max-width: 768px) {
+  .cash-ctn {
+    padding: 10px;
+    height: auto;
+  }
+
+  /* Header : On empile le montant total et la recherche */
+  .cash-ctn .cash-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .cash-ctn .header-left, 
+  .cash-ctn .header-right {
+    width: 100%;
+    margin: 0;
+    align-items: flex-start;
+  }
+
+  .cash-ctn .header-right {
+    flex-direction: row;
+    justify-content: space-between;
+    background: #f1f5f9;
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  /* Recherche : Input prend toute la largeur */
+  .cash-ctn input {
+    width: 100% !important;
+    margin: 10px 0;
+    box-sizing: border-box;
+  }
+
+  .autocomplete-wrapper {
+    width: 100%;
+  }
+
+  /* Liste de suggestions mobile-friendly */
+  .suggestions-list {
+    width: 100%;
+    max-height: 200px;
+    position: absolute;
+    z-index: 1001;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+
+  /* Data : On passe du mode côte-à-côte au mode empilé */
+  .cash-ctn .cash-data {
+    flex-direction: column;
+    border-top: none;
+  }
+
+  /* Zone Produit Trouvé */
+  .cash-ctn .product-result {
+    width: 100%;
+    height: auto;
+    min-height: 150px;
+    overflow: visible;
+    padding: 10px 0;
+    border-bottom: 1px dashed #cbd5e1;
+  }
+
+  /* Le Panier (Cart) en bas */
+  .cash-ctn .cash-cart {
+    width: 100%;
+    height: auto;
+    min-height: 300px;
+    border-left: none;
+    padding: 15px 0;
+  }
+
+  /* Bouton de confirmation flottant ou large */
+  .confirm-btn {
+    width: 120px !important;
+    height: 45px;
+    font-weight: bold;
+  }
+
+  .cash-ctn p {
+    font-size: 1.1rem; /* Total un peu plus petit sur mobile */
+  }
+}

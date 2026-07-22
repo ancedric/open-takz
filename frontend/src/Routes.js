@@ -8,9 +8,9 @@ import LandingPage from './views/LandingPage.vue'
 import Project from './views/Project.vue'
 import Docs from './views/Docs.vue'
 import AddTask from './components/AddTask.vue'
-import Profile from './views/Profile.vue'
-import Login from './views/Login.vue'
-import Register from './views/Register.vue'
+import Profile from './views/authentication/Profile.vue'
+import Login from './views/authentication/Login.vue'
+import Register from './views/authentication/Register.vue'
 import EmployePortal from './views/EmployeePortal.vue'
 import Pricing from './views/Pricing.vue'
 import UsersConditions from './views/UserSConditions.vue'
@@ -18,14 +18,13 @@ import PrivacyPolicy from './views/PrivacyPolicy.vue'
 import LegalNotice from './views/LegalNotice.vue'
 import Support from './views/Support.vue'
 import Credits from './views/Credits.vue'
-import CreateCompany from './views/CreateCompany.vue'
-import JoinCompany from './views/JoinCompany.vue'
-import FinanceManagement from './views/FinanceManagement.vue'
-import HRManagement from './views/HRManagement.vue'
-import AccountingManagement from './views/AccountingManagement.vue'
-import CRMManagement from'./views/CRMManagement.vue'
-import Dashboard from './views/Dashboard.vue'
-import ClosingArchives from './views/ClosingArchives.vue'
+import CreateCompany from './views/authentication/CreateCompany.vue'
+import FinanceManagement from './Modules/Accounting/FinanceManagement.vue'
+import HRManagement from './Modules/HR/HRManagement.vue'
+import AccountingManagement from './Modules/Accounting/AccountingManagement.vue'
+import CRMManagement from'./Modules/CRM/CRMManagement.vue'
+import Dashboard from './Modules/Dashboard/Dashboard.vue'
+import ClosingArchives from './Modules/Accounting/ClosingArchives.vue'
 import ModuleLayout from './Layout/ModuleLayout.vue'
 import Home from './views/Home.vue'
 import SuperAdmin from './views/SuperAdmin.vue'
@@ -33,6 +32,7 @@ import ErrorPage from './views/ErrorPage.vue'
 import SubscriptionExpired from './views/SubscriptionExpired.vue'
 import Presentation from './Modules/presentation/home.vue'
 import PresentationEditor from './Modules/presentation/Editor.vue'
+import Payment from './Modules/payment/home.vue'
 
 const departments = ref([])
 
@@ -42,6 +42,22 @@ onMounted(async () => {
     departments.value = depts || []
 })
 
+const authorizationGuard = (to, from, next) => {
+  const userStore = useUserStore();
+  const user = userStore.user;
+
+  if (!user) return next('/login');
+
+  const isModuleActive = user.company.active_modules?.includes(to.path.split('/')[2]); // Extrait le nom du module de l'URL
+  const hasPlan = ['PRO', 'PREMIUM'].includes(user.company.plan);
+
+  if (isModuleActive && hasPlan) {
+    next();
+  } else {
+    console.log('Accès refusé : module non actif ou plan insuffisant', user.company.plan);
+    next('/home');
+  }
+}
 const presentationGuard = (to, from, next) => {
   const userStore = useUserStore();
   const user = userStore.user;
@@ -70,7 +86,6 @@ const routes = [
   { path: '/legalNotice', component: LegalNotice },
   { path: '/support', component: Support },
   { path: '/credits', component: Credits },
-  { path: '/join-company/:userref', component: JoinCompany },
   { path: '/subscription-expired', component: SubscriptionExpired },
   
   {
@@ -170,6 +185,16 @@ const routes = [
       },
       { path: 'presentation/edit/:id', component: PresentationEditor,
         beforeEnter: presentationGuard,
+      },
+      { 
+        path: 'payment', 
+        component: Payment,
+        beforeEnter: authorizationGuard
+      },
+      { 
+        path: 'stora', 
+        component: Payment,
+        beforeEnter: authorizationGuard
       },
       { path: 'employe', component: EmployePortal }
     ]

@@ -12,6 +12,7 @@ import {
   getUsers,
   getUserByRef,
   getUserByEmail,
+  getUserPhone,
   logoutUser
 } from '../controllers/user.controller.js';
 
@@ -49,6 +50,7 @@ userRouter.put('/profile', isAuthenticated, updateProfile);
 // Admin / listing
 userRouter.get('/users', isAuthenticated, getUsers);  
 userRouter.get('/email/:email', isAuthenticated, getUserByEmail);
+userRouter.get('/user-phone/:userref', isAuthenticated, getUserPhone);
 userRouter.get('/:ref', isAuthenticated, getUserByRef); 
 
 userRouter.post('/logout', logoutUser);

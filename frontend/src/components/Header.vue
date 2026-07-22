@@ -58,12 +58,14 @@ import DefaultAvatar from '../assets/images/Default-avatar.png'
 import { useRouter } from 'vue-router'
 import { ref, computed } from 'vue'
 import { useUserStore } from '../store/index'
+import { useI18n } from 'vue-i18n'
 
 const userStore = useUserStore()
 const router = useRouter()
 const isAccountOpen = ref(false)
 const isModuleLauncherOpen = ref(false)
 const showExpiryModal = ref(false);
+const { t } = useI18n();
 
 // Optionnel : Une fonction pour rediriger vers le paiement
 const goToBilling = () => {
@@ -87,10 +89,10 @@ const subscriptionStatus = computed(() => {
   const diffInMs = expiry - today;
   const diffInDays = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
 
-  if (diffInDays <= 0) return { label: 'Expiré', class: 'expired', days: 0 };
-  if (diffInDays <= 7) return { label: `Expire dans ${diffInDays}j`, class: 'urgent', days: diffInDays };
+  if (diffInDays <= 0) return { label: t('header.expired'), class: 'expired', days: 0 };
+  if (diffInDays <= 7) return { label: t('header.expire-in')+`${diffInDays}j`, class: 'urgent', days: diffInDays };
   
-  return { label: 'Abonnement Actif', class: 'active', days: diffInDays };
+  return { label: t('header.active-subscription'), class: 'active', days: diffInDays };
 });
 
 const handleLogout = () => {

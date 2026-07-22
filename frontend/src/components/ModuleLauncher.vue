@@ -50,8 +50,8 @@ const activeModules = computed(() => userStore.user.company?.active_modules || [
 
 const availableModules = [
     { id: 'inventory', name: 'Stocks & Ventes', color: '#004581', link: `https://store.getcorevia.net/${userStore.user?.user?.userref}`, icon: 'box' },
-    { id: 'hr', name: 'RH & Paie', color: '#10b981', link: '#', icon: 'users' },
-    { id: 'finance', name: 'Comptabilité', color: '#f59e0b', link: '#', icon: 'dollar' },
+    { id: 'factory', name: 'RH & Paie', color: '#10b981', link: '#', icon: 'users' },
+    { id: 'payment', name: 'Paiement', color: '#f59e0b', link: '/home/payment', icon: 'dollar' },
     { id: 'presentation', name: 'Présentation', color: '#2563eb', link: '/home/presentation', icon: 'desktop' }
 ]
 
@@ -74,6 +74,10 @@ const handleModuleClick = async (mod) => {
     if (mod.id === 'presentation') {
         // Redirection interne
         console.log('Redirection vers le module de présentation', mod.link);
+        router.push(mod.link);
+    }else if (mod.id === 'payment') {
+        // Redirection interne
+        console.log('Redirection vers le module de paiement', mod.link);
         router.push(mod.link);
     } else if (mod.link !== '#') {
         router.push('/home');

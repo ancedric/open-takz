@@ -1,14 +1,30 @@
 import pool from '../services/db.js';
 
 export const findUserByEmail = async (email) => {
-  const res = await pool.query('SELECT * FROM "user" WHERE email = $1', [email]);
+  const sql = `
+    SELECT u.*, e.* FROM "user" u
+    LEFT JOIN employe e ON u.userref = e.userref
+    WHERE email = $1
+  `
+  
+  const res = await pool.query(sql, [email]);
+  return res.rows[0];
+};
+
+export const findUserPhone = async (userref) => {
+  const sql = `
+    SELECT phone FROM "user"
+    WHERE userref = $1
+  `
+  
+  const res = await pool.query(sql, [userref]);
   return res.rows[0];
 };
 
 export const findUserByRef = async (userRef) => {
   const res = await pool.query(
-    `SELECT userRef, firstname, lastname, email, country, city, profilePhotoUrl, privilege, createdAt 
-     FROM "user" WHERE userRef = $1`, 
+    `SELECT userref, firstname, lastname, email, country, city, profilePhotoUrl, privilege, createdAt 
+     FROM "user" WHERE userref = $1`, 
     [userRef]
   );
   return res.rows[0];
@@ -24,21 +40,26 @@ export const createUser = async (user) => {
     country,
     city,
     profilePhotoUrl,
-    privilege = 'user'
+    privilege
   } = user;
 
-  const query = `
-    INSERT INTO "user" 
-      (userRef, firstname, lastname, email, password, country, city, profilePhotoUrl, privilege, createdAt) 
-    VALUES 
-      ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-    RETURNING *;
-  `;
+  try {
+    const query = `
+      INSERT INTO "user" 
+        (userref, firstname, lastname, email, password, country, city, profilephotourl, privilege, createdat) 
+      VALUES 
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+      RETURNING *;
+    `;
 
-  const values = [userRef, firstname, lastname, email, password, country, city, profilePhotoUrl, privilege];
+    const values = [userRef, firstname, lastname, email, password, country, city, profilePhotoUrl, privilege];
 
-  const res = await pool.query(query, values);
-  return res.rows[0];
+    const res = await pool.query(query, values);
+    return res.rows[0];
+  } catch(err){
+    console.error("Erreur lors de la création de l'utilisateur:", err)
+    throw err;
+  }
 };
 
 export const updateUserPassword = async (email, hashedPassword) => {

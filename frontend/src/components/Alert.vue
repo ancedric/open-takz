@@ -11,13 +11,13 @@
     const props = defineProps({
         type: String,
         action: String,
-        msg: String
+        message: String
     })
 
     const isDanger = ref(false)
     const isSuccess = ref(false)
     const isVisible = ref(false)
-    const message = ref(props.msg)
+    const message = ref(props.message)
 
     if (props.type === 'danger'){
         isDanger.value = true
@@ -43,17 +43,18 @@
         text-align: center;
         border-radius: 10px;
         box-shadow: 0 0 30px rgba(0, 0, 0, 0.3);
+        z-index: 99;
     }
     .alertCtn.danger{
         opacity: 1;
         color:#af0f04;
         background-color:#f3b1ac;
-        border: 3px solid #af0f04;
+        border: 1px solid #af0f04;
     }
     .alertCtn.success{
         opacity: 1;
         background-color: #a8f3ae;
         color:#04af12;
-        border: 3px solid #04af12;
+        border: 1px solid #04af12;
     }
 </style>

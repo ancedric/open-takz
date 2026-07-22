@@ -1,10 +1,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import supabase from '../services/supabaseConfig';
+import { api } from '../services/api.js';
 import QrcodeVue from 'qrcode.vue';
 import { useUserStore } from '../store/index';
 import { downloadContract, downloadPaySlip } from '../services/pdfGenerator'; 
 import AppIcon from '../components/AppIcon.vue';
+import { triggerToast } from '../services/toast.js';
 
 const userStore = useUserStore();
 const myPayroll = ref([]);
@@ -16,7 +17,7 @@ const currentTime = ref(new Date().toLocaleTimeString());
 const myTasks = ref([]);
 const myProjects = ref([]);
 const myContracts = ref([]);
-const companyInfo = ref(null);
+const companyInfo = ref(userStore.user.company);
 const requestLeaveOpen = ref(false);
 const isSubmittingLeave = ref(false);
 const leaveRequest = ref({
@@ -28,7 +29,7 @@ const leaveRequest = ref({
 const attendanceSubscription = ref(null);
 
 // Fonction pour écouter les changements de présence en temps réel
-const subscribeToAttendance = () => {
+/*const subscribeToAttendance = () => {
   const empId = userStore.user.employe.id;
 
   attendanceSubscription.value = supabase
@@ -46,7 +47,7 @@ const subscribeToAttendance = () => {
       }
     )
     .subscribe();
-};
+};*/
 
 setInterval(() => {
   currentTime.value = new Date().toLocaleTimeString();
@@ -54,45 +55,41 @@ setInterval(() => {
 
 const fetchMyData = async () => {
   loading.value = true;
-  const empId = userStore.user.employe.id;
-  const companyRef = userStore.user.company.companyref;
+  const empref = userStore.user.employe.empref;
+  const company = userStore.user.company;
   const userRef = userStore.user.user.userref;
 
   try {
+    let teamMemberships;
     // 1. Paie
-    const { data: payroll } = await supabase
-      .from('payroll_history')
-      .select('*')
-      .eq('employee_id', empId)
-      .order('created_at', { ascending: false });
-    myPayroll.value = payroll || [];
+    const payResponse = await api.get(`/payroll/get-my-history/${empref}`)
+    if(payResponse.data.success === true){
+      const collabResponse = await api.get(`/collaborator/get-collab-user/${userRef}`) 
 
-    // 2. Infos Entreprise
-    const { data: comp } = await supabase
-      .from('company') // Assure-toi que le nom de la table est 'companies'
-      .select('*')
-      .eq('companyref', companyRef)
-      .single();
-    companyInfo.value = comp;
-
-    // 3. Projets (où l'employé est dans l'équipe)
-    const { data: teamMemberships, error: teamErr } = await supabase
-      .from('collaborator')
-      .select('userref, role, team:teamref(projectref)')
-      .eq('userref', userRef);
-
-    if (teamErr) throw teamErr;
+      if(collabResponse.data.success === true) {
+        const collaborations = collabResponse.data.data.map(async (col) => {
+          const projectRef = col.projectref
+          const teamResponse = await api.get(`/team/project/${projectRef}`)
+          if(teamResponse.data.success === true){
+            teamMemberships = {
+              userref: userRef,
+              role: col.role,
+              team: teamResponse
+            }
+          }
+        })
+      }
+    }
 
     if (teamMemberships && teamMemberships.length > 0) {
       const projectRefs = teamMemberships.map(t => ({projectref: t.team.projectref, role: t.role}));
 
-      // 2. Récupérer les projets
-      const { data: projectsData, error: projErr } = await supabase
-        .from('project')
-        .select('*')
-        .in('projectref', projectRefs.map(p => p.projectref));
-
-      if (projErr) throw projErr;
+      const projects = projectRefs.map(async(p) => {
+        const projectResponse = await api.get(`/project/`)
+        if(projectReponse.data.success === false)
+          return {}
+        return projectResponse.data.data
+      })
 
       // 3. Fusionner : on ajoute le rôle correspondant à chaque projet
       myProjects.value = projectsData.map(proj => {
@@ -105,25 +102,16 @@ const fetchMyData = async () => {
     }
 
     // 3.3. Mes Tâches (filtrées par userref)
-    // Note : Vérifie si dans ta table 'task' le champ est 'assigned_to' ou 'userref'
-    const { data: tasks, error: taskErr } = await supabase
-      .from('assignments')
-      .select('*, tasks:taskref(*, project: projectref(projectname))')
-      .eq('userref', userStore.user.user.userref) 
-
-    if (taskErr) console.error("Erreur Tâches:", taskErr.message);
-    myTasks.value = tasks || [];
-
-    //4. les contrats de travail
-    const { data: contracts, error: contractErr } = await supabase
-      .from('document')
-      .select('*')
-      .eq('employeeref', userStore.user.employe.empref)
-      .order('createdat', { ascending: false });
-
-      console.log('contrats récupérés:', contracts)
-      
-      myContracts.value = contracts || [];
+    const assignResponse = await api.get(`/assignment/get-user-assignments/${userStore.user.user.userref}`)
+    if(assignResponse.data.success ===true ){
+      const assignments = assignResponse.data.data;
+      assignments.map(async(ass) =>{
+        const taskRes = await api.get(`/task/get-tasks/${ass.projectref}`)
+        if(taskRes.data.success === false)
+          return [];
+        return taskRes.data.data;
+      })
+    }
 
   } catch (err) {
     console.error("Erreur portail:", err.message);
@@ -142,27 +130,21 @@ const getTaskStatus = (task) => {
 };
 
 const checkTodayAttendance = async () => {
-  const empId = userStore.user.employe?.id;
-  if (!empId) return;
+  const empref = userStore.user.employe?.empref;
+  if (!empref) return;
 
 const today = new Date().toISOString().split('T')[0];
-  const { data, error } = await supabase
-    .from('attendance')
-    .select('*')
-    .eq('employee_id', empId)
-    .eq('date', today)
-    .maybeSingle();
+const response = await api.get(`/attendance/check-today-attendance/${empref}/${today}`)
 
-  if (error && error.code !== 'PGRST116') console.error(error);
-  if (data) attendanceRecord.value = data;
+  if (response.data.success === false) attendanceRecord.value = [];
+  attendanceRecord.value = response.data.data;
 };
 
 const submitLeaveRequest = async () => {
   try{
     isSubmittingLeave.value = true;
-    const reqRef = `LEAV-${Date.now()}`;
-    const {data, error } = await supabase.from('leave_requests').insert([{
-      request_ref: reqRef,
+
+    const response = await api.post('/leave/new-request', {
       employee_id: userStore.user.employe.id,
       employee_name: `${userStore.user.user.firstname} ${userStore.user.user.lastname}`,
       companyref: userStore.user.company.companyref,
@@ -172,19 +154,23 @@ const submitLeaveRequest = async () => {
       duration_days: Math.ceil((new Date(leaveRequest.value.endDate) - new Date(leaveRequest.value.startDate)) / (1000 * 60 * 60 * 24)) + 1,
       reason: leaveRequest.value.reason,
       status: 'pending'
-    }]);
-    if (error) throw error;
-    requestLeaveOpen.value = false;
-    // Réinitialiser le formulaire
-    leaveRequest.value = {
-      type: '',
-      startDate: '',
-      endDate: '',
-      reason: ''
-    };
-
+    })
+    if(response.data.success){
+      triggerToast("Demande envoyée", "success");
+      requestLeaveOpen.value = false;
+      // Réinitialiser le formulaire
+      leaveRequest.value = {
+        type: '',
+        startDate: '',
+        endDate: '',
+        reason: ''
+      };
+    } else {
+      triggerToast(response.data.message, "error");
+    }
   }catch(e){
     console.error("Erreur lors de la soumission de la demande de congé:", e);
+    triggerToast(e, "error");
     isSubmittingLeave.value = false;
   }
 };
@@ -196,28 +182,28 @@ const handlePunch = async () => {
   if (!attendanceRecord.value) {
     const limitTime = 8;
     const isLate = now.getHours() >= limitTime && now.getMinutes() > 0;
-    const { data, error } = await supabase.from('attendance').insert([{
+
+    const response = await api.post('/attendance/new', {
       employee_id: userStore.user.employe.id,
       companyref: userStore.user.employe.companyref,
       date: today,
       check_in: now.toISOString(),
       status: isLate ? 'retard' : 'present'
-    }]).select().single();
-    if (!error)attendanceRecord.value = data;
-  } else {
+    })
+    
+    if (response.data.sucess === true)attendanceRecord.value = response.data.data;
+  } else {    
+    const response = await api.put(`/attendance/check-out/${attendanceRecord.value.id}`,{ check_out: now.toISOString() } )
+    if (response.data.success === true) attendanceRecord.value = data;
+
     if (attendanceRecord.value.check_out) return triggerToast("Journée terminée!", "success");
-    const { data, error } = await supabase.from('attendance')
-      .update({ check_out: now.toISOString() })
-      .eq('id', attendanceRecord.value.id)
-      .select().single();
-    if (!error) attendanceRecord.value = data;
   }
 };
 
 onMounted(() => {
     fetchMyData();
     checkTodayAttendance();
-    subscribeToAttendance();
+    //subscribeToAttendance();
 });
 
 onUnmounted(() => {

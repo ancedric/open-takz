@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import supabase from '../services/supabaseConfig.js'
+import { api } from '../services/api';
 
 export const useUserStore = defineStore('user', () => {
   // 1. On essaie de récupérer immédiatement les données du localStorage (Synchrone)
   const _savedUser = localStorage.getItem('user');
-  const user = ref(_savedUser ? JSON.parse(_savedUser) : null);
+  const user = ref(_savedUser ? _savedUser : null);
   
   // Si on a un user en cache, on est techniquement authentifié en attendant la vérification
   const isAuthenticated = ref(!!_savedUser); 
@@ -20,15 +20,16 @@ export const useUserStore = defineStore('user', () => {
         assignments: []
     });
 
-    const authenticate = async (userData, employe, company) => {
+    const authenticate = async (token, userData, employe, company) => {
     try {
+      console.log("token: ", token, "user: ",userData, "employe: ",employe, "company: ",company)
         // 3. On crée l'objet structuré global
-        const sessionData = { 
+        const sessionData = {
+            token: token, 
             user: userData, 
             employe: employe, 
             company: company 
         };
-
         user.value = sessionData;
         isAuthenticated.value = true;
         
@@ -50,37 +51,17 @@ export const useUserStore = defineStore('user', () => {
       isLoading.value = false;
       return;
     }
-    console.log('Session trouvée dans localStorage, tentative de restauration...', JSON.parse(_sessionRaw));
+    console.log('Session trouvée dans localStorage, tentative de restauration...', _sessionRaw);
     try {
       const session = JSON.parse(_sessionRaw);
-      
-      const { data, error } = await supabase
-        .from('user')
-        .select(`
-          *,
-          employe (*, company:companyref (*)),
-          
-        `)
-        .eq('email', session.user.email)
-        .single();
 
-      if (data && !error) {
-        // CORRECTION ICI : Reconstruction de l'objet que tu utilisais sans le définir
-        const updatedSession = {
-          user: { 
-            userref: data.userref, // Assure-toi que c'est bien userref
-            email: data.email, 
-            firstname: data.firstname, 
-            lastname: data.lastname,
-            profilephotourl: data.profilephotourl
-          },
-          employe: data.employe[0] || data.employe, // Supabase renvoie parfois un array selon la relation
-          company: data.employe.company[0] || data.employe.company // Idem pour la company
-        };
+      const userResponse = await api.get('/user/')
+      if(userResponse.data.valid){
+            user.value = session;
+            console.log("restaured user: ", user.value)
+            isAuthenticated.value = true;
+            localStorage.setItem('user', JSON.stringify(session));
 
-        user.value = updatedSession;
-        isAuthenticated.value = true;
-        localStorage.setItem('user', JSON.stringify(updatedSession));
       }
     } catch (err) {
       console.error('Erreur restauration session:', err);

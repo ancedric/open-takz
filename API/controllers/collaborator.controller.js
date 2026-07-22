@@ -65,12 +65,12 @@ export const getCollabUser = async (req, res) => {
   try {
     const result = await findCollabByUserRef(userref);  
     if (!result) {
-      return res.status(404).json({ message: 'No collaborator found for this user.' });
+      return res.status(404).json({ success: false, message: 'No collaborator found for this user.' });
     }
-    return res.status(200).json(result);
+    return res.status(200).json({success: true, data: result});
   } catch (error) {
     console.error('Erreur récupération collaborateur par userRef:', error);
-    return res.status(500).json({ error: 'Erreur serveur' });
+    return res.status(500).json({success: false, error: 'Erreur serveur' });
   }
 };
 export const getCollaborator = async (req, res) => {
