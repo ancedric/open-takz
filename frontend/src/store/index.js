@@ -1,11 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import axios from 'axios'
+import supabase from '../services/supabaseConfig.js'
 
 export const useUserStore = defineStore('user', () => {
-  const user = ref(null);
-    const isAuthenticated = ref(false);
-    const isLoading = ref(true);
+  // 1. On essaie de récupérer immédiatement les données du localStorage (Synchrone)
+  const _savedUser = localStorage.getItem('user');
+  const user = ref(_savedUser ? JSON.parse(_savedUser) : null);
+  
+  // Si on a un user en cache, on est techniquement authentifié en attendant la vérification
+  const isAuthenticated = ref(!!_savedUser); 
+  const isLoading = ref(true);
 
     // Nouvelles variables d'état pour les projets
     const projects = ref([]);
@@ -16,125 +20,143 @@ export const useUserStore = defineStore('user', () => {
         assignments: []
     });
 
-  const authenticate = (userData, token) => {
-    user.value = userData
-    isAuthenticated.value = true
-    localStorage.setItem('user-token', token)
-    console.log('Utilisateur authentifié et token stocké.')
-    console.log('Utilisateur authentifié :', user.value)
-  }
+    const authenticate = async (userData, employe, company) => {
+    try {
+        // 3. On crée l'objet structuré global
+        const sessionData = { 
+            user: userData, 
+            employe: employe, 
+            company: company 
+        };
+
+        user.value = sessionData;
+        isAuthenticated.value = true;
+        
+        // 4. On enregistre dans le localStorage
+        localStorage.setItem('user', JSON.stringify(sessionData));
+        
+
+    } catch (err) {
+        console.error("Erreur lors de la récupération des magasins pendant l'auth:", err);
+        // On peut quand même authentifier sans magasins si besoin, ou bloquer
+    }
+};
 
   const init = async () => {
-    const token = localStorage.getItem('user-token')
-    if (token) {
-      try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/user`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        if (response.data?.valid) {
-          user.value = response.data.user
-          isAuthenticated.value = true
-        } else {
-          logout()
-        }
-      } catch (err) {
-        console.error('Erreur lors de la vérification du token:', err)
-        logout()
-      }
+    isLoading.value = true;
+    const _sessionRaw = localStorage.getItem('user');
+    
+    if (!_sessionRaw) {
+      isLoading.value = false;
+      return;
     }
-    isLoading.value = false
-  }
+    console.log('Session trouvée dans localStorage, tentative de restauration...', JSON.parse(_sessionRaw));
+    try {
+      const session = JSON.parse(_sessionRaw);
+      
+      const { data, error } = await supabase
+        .from('user')
+        .select(`
+          *,
+          employe (*, company:companyref (*)),
+          
+        `)
+        .eq('email', session.user.email)
+        .single();
+
+      if (data && !error) {
+        // CORRECTION ICI : Reconstruction de l'objet que tu utilisais sans le définir
+        const updatedSession = {
+          user: { 
+            userref: data.userref, // Assure-toi que c'est bien userref
+            email: data.email, 
+            firstname: data.firstname, 
+            lastname: data.lastname,
+            profilephotourl: data.profilephotourl
+          },
+          employe: data.employe[0] || data.employe, // Supabase renvoie parfois un array selon la relation
+          company: data.employe.company[0] || data.employe.company // Idem pour la company
+        };
+
+        user.value = updatedSession;
+        isAuthenticated.value = true;
+        localStorage.setItem('user', JSON.stringify(updatedSession));
+      }
+    } catch (err) {
+      console.error('Erreur restauration session:', err);
+      // Ne pas logout ici au premier echec réseau, sinon l'utilisateur est déco par erreur
+    } finally {
+      isLoading.value = false;
+    }
+  };
 
     const logout = () => {
         user.value = null;
         isAuthenticated.value = false;
-        localStorage.removeItem('user-token');
+        localStorage.removeItem('user');
     }
 
 // Action pour charger TOUTES les données de tous les projets de l'utilisateur
-    const getProjects = async (userRef) => {
-      try {
-        if (!userRef) {
-          console.warn('Aucun utilisateur connecté ou userref manquant.');
-          projects.value = [];
-          return;
-        }
+    const getProjects = async (deptRef) => {
+  try {
+    if (!deptRef) {
+      projects.value = [];
+      return;
+    }
 
-        // 1. Récupérer les collaborations de l'utilisateur.
-        const collaborationsRes = await axios.get(`${import.meta.env.VITE_API_URL}/collab/get-collab-user/${userRef}`);
-        const collaborations = collaborationsRes.data;
-        
-        if (!collaborations || collaborations.length === 0) {
-          // Si aucune collaboration n'est trouvée, charger ses propres projets
-          await loadUserOwnedProjects(); 
-          return;
-        }
+    // 1. On récupère le Projet + l'Équipe liée en UNE SEULE requête (Jointure)
+    const { data: projectsData, error: projError } = await supabase
+      .from('project')
+      .select(`
+        *,
+        team (
+          teamref,
+          role,
+          collaborator (
+            collabref,
+            role,
+            user:userref (*) 
+          )
+        )
+      `)
+      .eq('deptref', deptRef);
 
-        // 2. Pour chaque collaboration, on récupère l'équipe associée.
-        const uniqueTeamRefs = [...new Set(collaborations.map(c => c.teamref))];
-        const teamPromises = uniqueTeamRefs.map(teamRef => 
-          axios.get(`${import.meta.env.VITE_API_URL}/team/get-team-collab/${teamRef}`)
-        );
-        const teamResponses = await Promise.all(teamPromises);
-        const teams = teamResponses.map(res => res.data);
+    if (projError) throw projError;
 
-        // 3. Pour chaque équipe, on récupère le projectRef associé.
-        const projectRefs = teams.map(t => t.projectref);
-        const uniqueProjectRefs = [...new Set(projectRefs)]; // Éliminer les doublons
-        
-        if (uniqueProjectRefs.length === 0) {
-          projects.value = [];
-          return;
-        }
+    // 2. On récupère les tâches et assignations à part (plus simple pour le traitement)
+    const detailedProjects = await Promise.all(projectsData.map(async (proj) => {
+      
+      // Récupérer les tâches du projet
+      const { data: tasks } = await supabase
+        .from('task')
+        .select('*')
+        .eq('projectref', proj.projectref);
 
-        // 4. Pour chaque projectRef, on récupère les détails du projet.
-        const detailedProjectsPromises = uniqueProjectRefs.map(async (projectRef) => {
-
-          const [projectRes, tasksRes, teamRes] = await Promise.all([
-              axios.get(`${import.meta.env.VITE_API_URL}/project/${projectRef}`),
-              axios.get(`${import.meta.env.VITE_API_URL}/task/get-tasks/${projectRef}`),
-              axios.get(`${import.meta.env.VITE_API_URL}/team/project/${projectRef}`)
-          ]);
-          
-          const teamWithUserDetails = teamRes.data.members ? await Promise.all(
-              teamRes.data.members.map(async (member) => {
-                  const userRes = await axios.get(`${import.meta.env.VITE_API_URL}/user/${member.userref}`);
-                  return { ...member, user: userRes.data.data };
-              })
-          ) : [];
-          
-          const assignmentsPromises = tasksRes.data.data.map(task =>{
-            if(!task.taskref) return Promise.resolve({data: {data: []}});
-            return axios.get(
-              `${import.meta.env.VITE_API_URL}/assignment/get-assignments/${task.taskref}`)
-          });
-          const assignmentsResponses = await Promise.all(assignmentsPromises);
-          const allAssignments = [].concat(...assignmentsResponses.map(res => res.data.data));
-
-          const assignmentsWithUserDetails = await Promise.all(
-              allAssignments.map(async (assignment) => {
-                  if(!assignment.userref) return { ...assignment, user: null };
-                  const userRes = await axios.get(`${import.meta.env.VITE_API_URL}/user/${assignment.userref}`);
-                  return { ...assignment, user: userRes.data.data };
-              })
-          );
-          
-          return {
-              project: projectRes.data.data,
-              tasks: tasksRes.data.data,
-              team: teamWithUserDetails,
-              assignments: assignmentsWithUserDetails
-          };
-        });
-
-        projects.value = await Promise.all(detailedProjectsPromises);
-
-      } catch (err) {
-        console.error('Erreur lors du chargement des projets:', err);
+      // Récupérer les assignations avec les infos users
+      let assignments = [];
+      if (tasks && tasks.length > 0) {
+        const { data: assData } = await supabase
+          .from('assignments')
+          .select(`*, user:userref (*)`)
+          .in('taskref', tasks.map(t => t.taskref));
+        assignments = assData || [];
       }
-    };
+
+      return {
+        project: proj,
+        tasks: tasks || [],
+        // On aplatit la structure pour que ton interface ne change pas
+        team: proj.team?.[0]?.collaborator || [], 
+        assignments: assignments
+      };
+    }));
+
+    projects.value = detailedProjects;
+
+  } catch (err) {
+    console.error('Erreur chargement projets:', err);
+  }
+};
 
     // Action pour définir le projet courant, sans appel API
     const setCurrentProject = (projectRef) => {

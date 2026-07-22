@@ -1,8 +1,9 @@
 <template>
-    <Header />
+    <div class="header-ctn">
+        <Header />
+    </div>
     <div class="mentions-legales">
       <div class="page-head"><h1>Legal Notice</h1></div>
-        <router-link to="/">Home</router-link>
       <h1>Mentions Légales</h1>
       <p>OpenTask est un service en ligne édité par <strong>The Genius Code</strong>, société de services Internet ayant son siège social à Beedi Douala.</p>
       <h2>Éditeur</h2>
@@ -32,7 +33,7 @@
 </script>
 
 <style scoped>
-    .mentions-legales {
+.mentions-legales {
   padding-top: 70px;
   margin: 40px auto;
   padding: 20px;
@@ -41,6 +42,11 @@
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
+.header-ctn {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
 .mentions-legales h1 {
   font-size: 24px;
   margin-bottom: 10px;

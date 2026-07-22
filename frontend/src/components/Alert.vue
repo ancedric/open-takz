@@ -10,43 +10,27 @@
 
     const props = defineProps({
         type: String,
-        action: String
+        action: String,
+        msg: String
     })
 
     const isDanger = ref(false)
     const isSuccess = ref(false)
     const isVisible = ref(false)
-    const message = ref('')
+    const message = ref(props.msg)
 
     if (props.type === 'danger'){
         isDanger.value = true
         isSuccess.value = false
-        if(props.action === 'emptyField' ){
-            message.value = 'Please fill all form fields before continuing'
-        }
-        else if(props.action === 'error'){
-            message.value = 'An error occured when processing the operation'
-        }
         
-
         setTimeout(() => isDanger.value = false, 5000)
     } else if (props.type === 'success'){
         isDanger.value = false
         isSuccess.value = true
         
-        if(props.action === 'loggedIn'){
-            message.value = 'Successfully logged in'
-        }
-        else if(props.action === 'modified'){
-            message.value = 'Modification succeed'
-        }else if(props.action === 'added'){
-            message.value = 'Successfully added'
-        }
-
         setTimeout(() => isSuccess.value = false, 5000)
     }
 </script>
-
 <style scoped>
     .alertCtn{
         opacity: 0;

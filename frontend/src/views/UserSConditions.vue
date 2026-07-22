@@ -1,5 +1,7 @@
 <template>
-    <Header />
+    <div class="header-ctn">
+        <Header />
+    </div>
     <div class="conditions">
       <div class="page-head"><h1>Users Conditions</h1></div>
         <router-link to="/">Home</router-link>
@@ -42,7 +44,7 @@
     background-color: #f9f9f9;
     border: 1px solid #ddd;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-
+    
   .page-head{
       text-align: center;
       margin-bottom: 30px;
@@ -58,6 +60,11 @@
     }
 }
 
+    .header-ctn {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
 .conditions h1 {
   font-size: 24px;
   margin-bottom: 10px;

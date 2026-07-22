@@ -1,11 +1,10 @@
-
 <script setup>
     import {ref} from 'vue'
     import {useRoute, useRouter} from 'vue-router'
     import Alert from './Alert.vue';
     import Spinner from './Spinner.vue';
     import AddTask from './AddTask.vue'
-    import axios from 'axios';
+    import supabase from '../services/supabaseConfig.js';
 
     const newProject = ref('')
     const errors = ref(false)
@@ -35,11 +34,14 @@
 
         isLoading.value = true;
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/user/users`);
+            //const response = await axios.get(`${import.meta.env.VITE_API_URL}/user/users`);
+            const {data, error} = await supabase
+            .from('user')
+            .select('*')
             
-            if (!response.data?.data) throw new Error("Aucune donnée reçue");
+            if (error) throw new Error("Aucune donnée reçue", error);
 
-            members.value = response.data.data;
+            members.value = data;
 
             matchedMember.value = members.value.find(member => 
                 member.email.toLowerCase() === searchMember.value.toLowerCase()             
@@ -85,28 +87,25 @@
         display: flex;
         gap: 0;
         justify-content: center;
-        width: 200px;
+        width: 245px;
         height: 25px;
 
         input{
-            width: 160px;
-            border-top-left-radius: 5px;
-            border-bottom-left-radius: 5px;
-            border: 1px solid #948a8a42;
-            border-right: none;
-            margin-right:0;
-            padding-left: 10px;
-            font-size: 0.8rem;
+            flex: 1; 
+            padding: 15px 12px; 
+            border-top-left-radius: 6px;
+            border-bottom-left-radius: 6px;
+            border: 1px solid #ddd;
         }
         .create-btn{
             display: flex;
             justify-content: center;
             align-items: center;
             width: 40px;
-            height: 25px;
+            height: 33px;
             border: 1px solid #948a8a42;
-            border-top-right-radius: 5px;
-            border-bottom-right-radius: 5px;
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
             img{
                 width: 20px;
                 height: 20px;

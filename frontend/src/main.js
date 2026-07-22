@@ -3,22 +3,15 @@ import './style.css'
 import App from './App.vue'
 import router from './Routes.js'
 import { createPinia } from 'pinia'
-import './services/axios.js'
-import { useUserStore } from './store/index.js'
+import i18n from './i18n.js'
+import 'primeicons/primeicons.css'
 
 const app =createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
 app.use(router)
+app.use(i18n)
 
-const userStore = useUserStore();
-
-(async () => {
-    await userStore.init();
-    if (userStore.isAuth) {
-        await userStore.getProjects();
-    }
-    app.mount('#app')
-})();
+app.mount('#app')
 

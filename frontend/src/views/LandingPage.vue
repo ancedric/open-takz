@@ -1,24 +1,26 @@
 <template>
     <div class="landing-page">
       <header>
-        <h1>OpenTaskz</h1>
+        <router-link to='/' ><img src="../assets/images/logo-2.png" alt="Corevia Logo" class="logo"></router-link>
         <nav>
           <ul class="menu-list">
-            <li><router-link to='/' class="menuLink">Features</router-link></li>
+            <li><router-link to='/docs' class="menuLink">Docs</router-link></li>
             <li><router-link to='/pricing' class="menuLink">Pricing</router-link></li>
           </ul>
-          <router-link to='/auth' class="navLink1">Log in</router-link>
-          <router-link to='/register' class="navLink2">Sign up</router-link>
+          <router-link to='/auth' class="navLink1">{{t('landing-page.header.log-in')}}</router-link>
+          <router-link to='/register' class="navLink2">{{t('landing-page.header.sign-up')}}</router-link>
         </nav>
       </header>
       <main>
         <section class="hero">
           <div class="left">
-            <div class="accroche">Revolutionize your productivity with <b>OpenTaskz</b></div>
+            <div class="accroche">{{ t('landing-page.hero.accroche') }}</div>
             <div class="sub-text">
-              <p>We empower your Business by keeping everyone accountable for their work<br>
-              Join thousands of professionals who trust OpenTaskz to manage their projects</p>
-              <button @click="navigate" class="action">Get Started for Free</button>
+              <p>{{ t('landing-page.hero.sub-text') }}</p>
+              <div class="actions">
+                    <button @click="navigate" class="action">{{ t('landing-page.hero.get-started') }}</button>
+                    <a href="/assets/packages/Corevia.apk"  download="Corevia_Mobile.apk" class="action mobile-app">{{ t('landing-page.hero.download-app') }}</a>
+              </div>
             </div>
           </div>
           <div class="right">
@@ -33,7 +35,7 @@
                     <img src="../assets/icons/check-96.png" class="check">
                   </div>
                 </div>
-                  <p>The change begins HERE</p>
+                  <p>{{ t('landing-page.hero.the-heart-of-enterprise') }}</p>
               </div>
             </div>
           </div>
@@ -41,8 +43,8 @@
         <div class="landing-body">
           <section class="features">
             <div class="feat-header">
-              <h2>Manage your timeline with <br> unparalleled efficiency</h2>
-              <p>Experience the ultmate task management solution designed to suit all style of work, with an all-in-one tool that streamlines your workflow and simplifies your daily tasks.</p>
+              <h2>{{t('landing-page.body.manage-timeline')}} <br> {{t('landing-page.body.unparalleled-efficiency')}}</h2>
+              <p>{{t('landing-page.body.experience-the-ultimate')}}</p>
             </div>
             <div class="feat-ctn">
               <div class="feat-card">
@@ -53,8 +55,8 @@
                   <div class="null"></div>
                 </div>
                 <div>
-                  <h4>Task timeline dashboard</h4>
-                  <p>Visualize your tasks and deadlines in a clear and intuitive timeline, allowing you to prioritize and manage your workload effectively.</p>
+                  <h4>{{t('landing-page.body.task-timeline-dashboard')}}</h4>
+                  <p>{{t('landing-page.body.visualize-tasks')}}</p>
                 </div>
               </div>
               <div class="feat-card">
@@ -65,8 +67,8 @@
                   <div class="null"></div>
                 </div>
                 <div>
-                  <h4>Collaboration tools</h4>
-                  <p>Facilitate team collaboration with integrated communication tools, allowing you to share updates, files, and feedback in real time.</p>
+                  <h4>{{t('landing-page.body.collaboration-tools')}}</h4>
+                  <p>{{t('landing-page.body.seamless-collaboration')}}</p>
                 </div>
               </div>
               <div class="feat-card">
@@ -77,23 +79,23 @@
                   <div class="null"></div>
                 </div>
                 <div>
-                  <h4>Progress tracking</h4>
-                  <p>Monitor the progress of your tasks with visual indicators and reports, helping you stay on track and meet your deadlines.</p>
+                  <h4>{{t('landing-page.body.progress-tracking')}}</h4>
+                  <p>{{t('landing-page.body.real-time-updates')}}</p>
                 </div>
               </div>
             </div>
             <div>
               <div class="target-audience">
                 <div class="general">
-                  OpenTaskz is a CRM solution that can be adapted to suit the needs of any industry or business
+                  {{t('landing-page.body.corevia-is-an-erp-solution')}}
                 </div>
                 <div class="specific">
                   <ul>
-                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>Growing project teams</li>
-                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>Freelancers and consultants</li>
-                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>Agencies</li>
-                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>Devs aand PMs</li>
-                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>Startups</li>
+                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>{{t('landing-page.body.growing-project-teams')}}</li>
+                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>{{t('landing-page.body.freelancers-and-consultants')}}</li>
+                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>{{t('landing-page.body.agencies')}}</li>
+                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>{{t('landing-page.body.devs-and-pms')}}</li>
+                    <li><div class="dot-img"><img src="../assets/icons/checked.png" alt=""></div>{{t('landing-page.body.startups')}}</li>
                   </ul>
                 </div>
               </div>
@@ -106,30 +108,30 @@
           <section class="benefits">
             <div class="benefs">
               <div class="b-text">
-                <h3>This platform serve as the central location for all your work</h3>
-                <p>By using OpenTaskz, you can spend more time on team mangaement and less time on software-related tasks.</p>
+                <h3>{{t('landing-page.body.central-location')}}</h3>
+                <p>{{t('landing-page.body.by-using')}}</p>
               </div>
               <div class="b-list">
                 <ul>
                   <li>
                     <img src="../assets/icons/check-96.png">
-                    Projects managed in a day
+                    {{t('landing-page.body.hr-management-system')}}
                   </li>
                   <li>
                     <img src="../assets/icons/check-96.png">
-                    Fast project planning
+                    {{t('landing-page.body.accounting')}}
                   </li>
                   <li>
                     <img src="../assets/icons/check-96.png">
-                    Team collaboration
+                    {{t('landing-page.body.project-management')}}
                   </li>
                   <li>
                     <img src="../assets/icons/check-96.png">
-                    Hours saved for your custommers
+                    {{t('landing-page.body.automatic-presence-management-and-salary-calculation')}}
                   </li>
                   <li>
                     <img src="../assets/icons/check-96.png">
-                    Reporting and analytics
+                    {{t('landing-page.body.reporting-and-analytics')}}
                   </li>
                 </ul>
               </div>
@@ -158,44 +160,46 @@
         </div>
         
         <section class="call-to-action">
-          <h2>Ready to <em>organise</em> your remote work with us</h2>
-          <p>Join us today and try the best project management tool in the industry today! Ensure you're spending where you want to be.</p>
-          <div><button @click="navigate" class="action">Get Start today </button></div>
+          <h2>{{t('landing-page.body.ready-to-organize-your-company-with-us')}}</h2>
+          <p>{{t('landing-page.body.join-us-today-and-try-the-easiest-project-management-tool-in-the-industry-today-ensure-youre-spending-where-you-want-to-be')}}</p>
+          <div class="actions">
+            <button @click="navigate" class="action">{{ t('landing-page.hero.get-started') }}</button>
+                    <a href="/assets/packages/Corevia.apk"  download="Corevia_Mobile.apk" class="action mobile-app">{{ t('landing-page.hero.download-app') }}</a>
+          </div>
         </section>
         <footer>
           <div class="footer-top">
             <div class="footer-branding">
-              <div>OpenTaskz</div>
+              <img src="../assets/images/logo-2.png" alt="Corevia Logo" class="logo">
               <div>
-                <h5>Email Us at:</h5>
-                <p>ancedric55@gmail.com</p>
+                <h5>{{t('landing-page.footer.email-us-at')}}</h5>
+                <p>support@getcorevia.net</p>
               </div>
               <div class="social-links">
-                <a href="#" class="link"><img src="../assets/icons/facebook-96.png" alt=""></a>
-                <a href="#" class="link"><img src="../assets/icons/x-50.png" alt=""></a>
-                <a href="#" class="link"><img src="../assets/icons/linkedin-96.png" alt=""></a>
-                <a href="#" class="link"><img src="../assets/icons/youtube-96.png" alt=""></a>
+                <a href="https://www.linkedin.com/company/112978954" class="link"><img src="../assets/icons/x-50.png" alt=""></a>
+                <a href="https://www.x.com/corevia01" class="link"><img src="../assets/icons/linkedin-96.png" alt=""></a>
+                <a href="https://www.youtube.com/@corevia-s8l" class="link"><img src="../assets/icons/youtube-96.png" alt=""></a>
               </div>
             </div>
             <div class="footer-links-ctn">
               <div class="footer-links">
-                <h5>About</h5>
-                <a href="#" class="link">Company</a>
+                <h5>{{t('landing-page.footer.about')}}</h5>
+                <a href="#" class="link">{{t('landing-page.footer.company')}}</a>
                 <router-link to="support" class="link">Support Team</router-link>
               </div>
               <div class="footer-links">
-                <h5>Company</h5>
+                <h5>{{t('landing-page.footer.company')}}</h5>
                 <router-link to="/usersConditions" class="link">Terms of Use</router-link>
                 <router-link to="privacyPolicy" class="link">Privacy Policy</router-link>
                 <router-link to="legalNotice" class="link">Legal Notice</router-link>
                 <router-link to="#" class="link">FAQs</router-link>
                 <router-link to="credits" class="link">Credits</router-link>
-                <p class="link">Béedi, Douala Cameroon</p>
+                <p class="link">Yaoundé Cameroon</p>
               </div>
             </div>
           </div>
           <div class="footer-bottom">
-            <p>copyright© OpenTask, {{ currentYear }} All rights reserved</p>
+            <p>copyright© Corevia, {{ currentYear }} All rights reserved</p>
           </div>
         </footer>
       </main>
@@ -204,6 +208,9 @@
 
   <script setup>
   import { useRouter } from 'vue-router'
+  import { useI18n } from 'vue-i18n'
+
+  const {t} = useI18n()
 
   const router = useRouter()
   const currentYear = new Date().getFullYear()
@@ -234,16 +241,21 @@
       align-items: center;
       width: 100%;
       height: 50px;
-      background-color: #333;
+      background-color: #1e293b;
       color: #fff;
       padding: 10px;
       text-align: center;
       z-index: 100;
 
-      h1{
-        font-size: 1.5rem;
-        font-weight: bold;
-        margin: 0;
+      .logo{
+        width: 120px;
+        height: auto;
+        object-fit: contain;
+        margin-right: 20px;
+
+        @media (max-width: 400px){
+          width: 100px;
+        }
       }
 
       nav{
@@ -367,28 +379,50 @@
             padding: 0 10px;
           }
         }
-        .action{
-          width: 250px;
-          height:60px;
-          border: 2px solid #eee;
-          background: transparent;
-          background-color: #eee;
-          transition: all .3s ease;
-          color: #555;
-          font-size: 1rem;
-          font-weight: bold;
-          border-radius: 5px;
-          cursor: pointer;
-          &:hover{
-            background-color: #eeeeee65;
-              color:#555;
-          }
 
-          @media(max-width: 768px){
-            width: 200px;
-            height: 50px;
-            font-size: 0.9rem;
-            margin-left:15%;
+        .actions{
+          display: flex;
+          gap: 20px;
+
+          .action{
+            width: 250px;
+            height:60px;
+            border: 2px solid #eee;
+            background: transparent;
+            background-color: #eee;
+            transition: all .3s ease;
+            color: #555;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            &:hover{
+              background-color: #eeeeee65;
+              color:#555;
+            }
+
+            &.mobile-app{
+              width: 300px;
+              text-decoration: none;
+              background-color: #0e0e0e;
+              color: #eee;
+              border: none;
+              box-shadow: 0 0 10px rgba(200, 200, 200, .3);
+              padding: 20px 5px;
+              box-sizing: border-box;
+
+              &:hover{
+                background-color: #eeeeee65;
+                color:#555;
+              }
+            }
+
+            @media(max-width: 768px){
+              width: 200px;
+              height: 50px;
+              font-size: 0.9rem;
+              margin-left:15%;
+            }
           }
         }
 
@@ -813,9 +847,14 @@
             position: relative;
             z-index: 1;
         }
-        div{
+        .actions{
           position: relative;
           z-index: 1;
+          display: flex;
+          justify-content: center;
+          gap: 20px;
+          width: 100%;
+
           .action{
             width: 250px;
             height:60px;
@@ -831,22 +870,35 @@
               background-color: #eeeeee65;
               color:#555;
             }
-
             @media(max-width: 768px){
               width: 200px;
               height: 50px;
               font-size: 0.9rem;
               margin-left:15%;
             }
+            &.mobile-app{
+              width: 300px;
+              text-decoration: none;
+              background-color: #0e0e0e;
+              color: #eee;
+              border: none;
+              box-shadow: 0 0 10px rgba(200, 200, 200, .3);
+              padding: 20px 5px;
+              box-sizing: border-box;
+
+              &:hover{
+                background-color: #eeeeee65;
+                color:#555;
+              }
+            }
           }
         }
-        
     }
 
     footer{
       width: 100%;
-      background-color: #9fc9c0;
-      color: #5f5f5f;
+      background-color: #1e293b;
+      color: #fff;
       padding: 20px 50px;
       margin-top: 20px;
 
@@ -869,6 +921,17 @@
           align-items: center;
           gap: 10px;
           padding: 10px 50px;
+
+          .logo{
+            width: 120px;
+            height: auto;
+            object-fit: contain;
+            margin-right: 20px;
+
+            @media (max-width: 400px){
+              width: 100px;
+            }
+          }
 
           div:first-child{
             font-size: 1.5rem;
@@ -940,6 +1003,6 @@
       text-align: center;
       padding: 10px;
       font-size: 0.9rem;
-      color: #333;
+      color: #fff;
     }
 </style>
